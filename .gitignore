@@ -1,0 +1,54 @@
+# Added by code-review-graph
+.code-review-graph/
+
+# ── Environment / secrets ──────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+frontend/.env.local
+
+# ── Python ─────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+venv/
+.venv/
+env/
+*.egg
+
+# ── Legacy face DB (replaced by Supabase) ──────────────────────────────────
+face_db.pkl
+
+# ── Dataset / raw face photos (private biometric data) ─────────────────────
+dataset/
+
+# ── Logs ───────────────────────────────────────────────────────────────────
+*.log
+flask_debug.log
+flask_out.log
+frontend/frontend.log
+frontend/frontend_out.log
+
+# ── Next.js ────────────────────────────────────────────────────────────────
+frontend/.next/
+frontend/out/
+frontend/node_modules/
+node_modules/
+.next/
+
+# ── OS ─────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Editor ─────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo

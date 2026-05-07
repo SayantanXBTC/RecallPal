@@ -3,25 +3,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
-import { signOut } from 'firebase/auth';
-import { useRouter } from 'next/navigation';
-import { auth } from '@/lib/firebase';
+import { useAuth } from '@/lib/auth-context';
 import CameraPanel    from '@/components/CameraPanel';
 import AddPersonModal from '@/components/AddPersonModal';
 import PeopleSidebar  from '@/components/PeopleSidebar';
-import { RecognitionResult } from '@/lib/types';
+import { MultiRecognitionResult } from '@/lib/types';
 import { useTheme } from '@/lib/theme-context';
+import AlertBanner from '@/components/AlertBanner';
+import AccessibilityPanel from '@/components/AccessibilityPanel';
 
-const IDLE_RESULT: RecognitionResult = {
-  status: 'idle', name: null, confidence: 0, memory: null, suggestion: null,
-};
+const IDLE_RESULT: MultiRecognitionResult = { faces: [] };
 
 export default function DashboardPage() {
-  const router = useRouter();
+  const { logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const dark = theme === 'dark';
 
-  const [result,        setResult]        = useState<RecognitionResult>(IDLE_RESULT);
+  const [result,        setResult]        = useState<MultiRecognitionResult>(IDLE_RESULT);
   const [isModalOpen,   setIsModalOpen]   = useState(false);
   const [isMuted,       setIsMuted]       = useState(false);
   const [refreshPeople, setRefreshPeople] = useState(0);
@@ -32,33 +30,35 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (result.status === 'recognized' && result.name) {
-      if (result.name !== lastSpokenRef.current) {
-        lastSpokenRef.current = result.name;
-        if (!isMuted && 'speechSynthesis' in window) {
-          window.speechSynthesis.cancel();
-          const relation  = result.memory?.relation ?? 'person';
-          const utterance = new SpeechSynthesisUtterance(`This is ${result.name}. They are your ${relation}.`);
-          utterance.rate  = 0.88;
-          utterance.pitch = 1.0;
-          window.speechSynthesis.speak(utterance);
-        }
-      }
-    } else if (result.status !== 'recognized') {
+    const recognized = (result.faces ?? []).filter(f => f.status === 'recognized' && f.name);
+    if (recognized.length === 0) {
       lastSpokenRef.current = null;
+      return;
+    }
+    // Speak all newly recognized names as a joined phrase
+    const names = recognized.map(f => f.name!).sort().join(', ');
+    if (names !== lastSpokenRef.current) {
+      lastSpokenRef.current = names;
+      if (!isMuted && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const text = recognized.length === 1
+          ? `This is ${recognized[0].name}. They are your ${recognized[0].memory?.relation ?? 'person'}.`
+          : `You can see ${names}.`;
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate  = 0.88;
+        utterance.pitch = 1.0;
+        window.speechSynthesis.speak(utterance);
+      }
     }
   }, [result, isMuted]);
 
-  const handleRecognition = useCallback((r: RecognitionResult) => setResult(r), []);
+  const handleRecognition = useCallback((r: MultiRecognitionResult) => setResult(r), []);
   const handlePersonAdded = useCallback((name: string) => {
     setRefreshPeople((n) => n + 1);
     void name;
   }, []);
 
-  const handleSignOut = async () => {
-    await signOut(auth);
-    router.replace('/login');
-  };
+  const handleSignOut = () => logout();
 
   // Theme-aware tokens
   const headerBg   = dark ? 'rgba(18,14,9,0.80)'  : 'rgba(255,255,255,0.75)';
@@ -68,6 +68,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen flex flex-col" style={{ minHeight: '100vh' }}>
+      <AlertBanner />
 
       {/* ── Header ───────────────────────────────────────────────────────── */}
       <header
@@ -101,6 +102,9 @@ export default function DashboardPage() {
 
         {/* Right controls */}
         <div className="flex items-center gap-3">
+
+          {/* Accessibility */}
+          <AccessibilityPanel />
 
           {/* Dark mode toggle */}
           <button
@@ -156,6 +160,43 @@ export default function DashboardPage() {
               </svg>
             )}
           </button>
+
+          {/* Daily summary link */}
+          <Link
+            href="/summary"
+            className="w-8 h-8 rounded-xl flex items-center justify-center transition-all shrink-0"
+            style={{
+              background: dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+              border: `1px solid ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
+              color: textSoft,
+            }}
+            aria-label="Daily summary"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <rect x="3" y="4" width="18" height="18" rx="2" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+              <line x1="16" y1="2" x2="16" y2="6" strokeWidth={2} strokeLinecap="round" />
+              <line x1="8"  y1="2" x2="8"  y2="6" strokeWidth={2} strokeLinecap="round" />
+              <line x1="3"  y1="10" x2="21" y2="10" strokeWidth={2} strokeLinecap="round" />
+            </svg>
+          </Link>
+
+          {/* Settings link */}
+          <Link
+            href="/settings"
+            className="w-8 h-8 rounded-xl flex items-center justify-center transition-all shrink-0"
+            style={{
+              background: dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+              border: `1px solid ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
+              color: textSoft,
+            }}
+            aria-label="Settings"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <circle cx="12" cy="12" r="3" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
+            </svg>
+          </Link>
 
           {/* Sign out */}
           <button
@@ -234,19 +275,22 @@ export default function DashboardPage() {
           <span className="text-[11px] font-dm-sans" style={{ color: textSoft }}>RecallPal v1.0</span>
         </div>
         <span className="text-[11px] font-dm-sans" style={{ color: dark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.18)' }}>
-          {result.status === 'recognized' && result.name
-            ? `Recognized: ${result.name}`
-            : result.status === 'unknown'
-              ? 'Unknown face detected'
-              : result.status === 'no_face'
-                ? 'No face in frame'
-                : 'Waiting for camera…'}
+          {(() => {
+            const recognized = (result.faces ?? []).filter(f => f.status === 'recognized' && f.name);
+            const unknowns   = (result.faces ?? []).filter(f => f.status !== 'recognized');
+            if (recognized.length > 0) return `Recognized: ${recognized.map(f => f.name).join(', ')}`;
+            if (unknowns.length > 0)   return 'Unknown face detected';
+            if ((result.faces ?? []).length === 0 && result !== IDLE_RESULT) return 'No face in frame';
+            return 'Waiting for camera…';
+          })()}
         </span>
         <span className="ml-auto text-[11px] font-dm-sans" style={{ color: textSoft }}>
-          <span className="font-medium" style={{ color: textMain }}>
-            {result.status === 'recognized' ? `${Math.round((result.confidence ?? 0) * 100)}%` : '—'}
-          </span>
-          {result.status === 'recognized' && ' confidence'}
+          {(() => {
+            const recognized = (result.faces ?? []).filter(f => f.status === 'recognized' && f.name);
+            if (recognized.length === 0) return <span className="font-medium" style={{ color: textMain }}>—</span>;
+            const avg = Math.round(recognized.reduce((s, f) => s + (f.confidence ?? 0), 0) / recognized.length * 100);
+            return <><span className="font-medium" style={{ color: textMain }}>{avg}%</span>{' confidence'}</>;
+          })()}
         </span>
       </footer>
 

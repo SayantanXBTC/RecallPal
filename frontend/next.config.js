@@ -6,10 +6,15 @@ const nextConfig = {
     root: path.resolve(__dirname),
   },
   async rewrites() {
+    const backendUrl = process.env.BACKEND_URL || 'http://localhost:5000';
     return [
       {
+        source: '/api/auth/:path*',
+        destination: `${backendUrl}/api/auth/:path*`,
+      },
+      {
         source: '/api/:path*',
-        destination: 'http://localhost:5000/api/:path*',
+        destination: `${backendUrl}/api/:path*`,
       },
     ];
   },

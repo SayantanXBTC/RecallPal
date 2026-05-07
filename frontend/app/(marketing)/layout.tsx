@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import { Playfair_Display, DM_Sans } from 'next/font/google';
-import { ThemeProvider } from '@/lib/theme-context';
 import BubblesBackground from '@/components/landing/BubblesBackground';
 import '../globals.css';
 
@@ -27,12 +26,10 @@ export const metadata: Metadata = {
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className={`${playfair.variable} ${dmSans.variable} font-dm-sans marketing-root`}>
-      <ThemeProvider>
-        <BubblesBackground />
-        <div className="relative z-10">
-          {children}
-        </div>
-      </ThemeProvider>
+      <BubblesBackground />
+      <div className="relative z-10">
+        {children}
+      </div>
     </div>
   );
 }

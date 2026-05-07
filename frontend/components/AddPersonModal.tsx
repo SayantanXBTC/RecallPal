@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useToast } from '@/components/Toast';
+import { useAuth } from '@/lib/auth-context';
 
 interface AddPersonModalProps {
   isOpen:    boolean;
@@ -49,6 +50,7 @@ function compressFrame(
 
 export default function AddPersonModal({ isOpen, onClose, onSuccess }: AddPersonModalProps) {
   const { addToast } = useToast();
+  const { token } = useAuth();
 
   const videoRef  = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -187,7 +189,10 @@ export default function AddPersonModal({ isOpen, onClose, onSuccess }: AddPerson
       const parsedAge = age.trim() ? parseInt(age.trim(), 10) : null;
       const res = await fetch('/api/add-person', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body:    JSON.stringify({
           name:     trimmedName,
           relation,

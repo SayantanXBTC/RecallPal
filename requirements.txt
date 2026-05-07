@@ -5,4 +5,7 @@ tensorflow
 opencv-python
 numpy
 requests
-hindsight-client
+supabase
+python-jose[cryptography]
+scikit-learn
+gunicorn

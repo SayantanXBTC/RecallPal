@@ -1,25 +1,22 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { useAuth } from '@/lib/auth-context';
 import { ToastProvider } from '@/components/Toast';
 import { ThemeProvider } from '@/lib/theme-context';
 
 function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [checking, setChecking] = useState(true);
+  const { token, loading } = useAuth();
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => {
-      if (!user) router.replace('/login');
-      else setChecking(false);
-    });
-    return unsub;
-  }, [router]);
+    // Wait until localStorage has been read before deciding to redirect
+    if (!loading && !token) router.replace('/login');
+  }, [token, loading, router]);
 
-  if (checking) {
+  // Show spinner while rehydrating from localStorage OR when not yet authed
+  if (loading || !token) {
     return (
       <div className="min-h-screen flex items-center justify-center marketing-root font-dm-sans">
         <div className="flex flex-col items-center gap-4">

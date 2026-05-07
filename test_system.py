@@ -49,14 +49,13 @@ def test_health() -> None:
 
     _assert(r.status_code == 200, f"expected 200, got {r.status_code}")
     _assert(data.get("status") == "ok", "'status' should be 'ok'")
-    _assert("face_db_loaded"      in data, "'face_db_loaded' missing")
-    _assert("people_count"        in data, "'people_count' missing")
-    _assert("hindsight_connected" in data, "'hindsight_connected' missing")
-    _assert("hindsight_mode"      in data, "'hindsight_mode' missing")
-    _assert(data["hindsight_mode"] in ("cloud", "local"),
-            f"unexpected hindsight_mode: {data['hindsight_mode']!r}")
+    _assert("face_db_loaded"  in data, "'face_db_loaded' missing")
+    _assert("people_count"    in data, "'people_count' missing")
+    _assert("memory_backend"  in data, "'memory_backend' missing")
+    _assert(data["memory_backend"] == "supabase",
+            f"unexpected memory_backend: {data['memory_backend']!r}")
     print(f"   {PASS} health check passed  "
-          f"(people={data['people_count']}, memory={data['hindsight_mode']})")
+          f"(people={data['people_count']}, memory={data['memory_backend']})")
 
 
 def test_people_list() -> None:

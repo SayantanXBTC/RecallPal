@@ -53,13 +53,9 @@ export default function StatusBar() {
       {/* Memory mode */}
       {health && (
         <StatusDot
-          active={health.hindsight_connected}
-          label={
-            health.hindsight_mode === 'cloud'
-              ? 'Memory — Hindsight Cloud'
-              : 'Memory — Local JSON'
-          }
-          color={health.hindsight_mode === 'cloud' ? 'teal' : 'amber'}
+          active={health.memory_backend === 'supabase'}
+          label="Memory — Supabase"
+          color="teal"
         />
       )}
 

@@ -8,21 +8,12 @@ echo ""
 
 # ── Preflight checks ────────────────────────────────────────────────────────
 
-if [ ! -f "face_db.pkl" ]; then
-  echo "WARNING: face_db.pkl not found."
-  echo "  The system will start with an empty face database."
-  echo "  Place your trained face_db.pkl in the project root, or"
-  echo "  use the 'Add Person' feature in the UI to enrol people live."
-else
-  echo "✓ Face database found (face_db.pkl)"
-fi
-
 if [ ! -f ".env" ]; then
   echo ""
   echo "WARNING: .env not found — copying from .env.example"
   cp .env.example .env
-  echo "  Edit .env and add your Hindsight API key to enable cloud memory."
-  echo "  Without it, memories are stored locally in memory_store.json."
+  echo "  Edit .env and fill in your Supabase URL, service key, anon key,"
+  echo "  and JWT secret before starting the server."
 else
   echo "✓ Environment file found (.env)"
 fi

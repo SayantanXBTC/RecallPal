@@ -293,3 +293,30 @@
   animation: pulse-ring 1.5s ease-out infinite;
   opacity: 0;
 }
+
+/* ── High-contrast mode ─────────────────────────────────── */
+html.high-contrast {
+  --hc-bg:     #000000;
+  --hc-text:   #ffffff;
+  --hc-accent: #ffdd00;
+  --hc-border: #ffffff;
+}
+
+html.high-contrast body {
+  background: var(--hc-bg) !important;
+  color:      var(--hc-text) !important;
+}
+
+html.high-contrast button,
+html.high-contrast a {
+  outline: 2px solid var(--hc-accent) !important;
+  outline-offset: 2px;
+}
+
+html.high-contrast input,
+html.high-contrast textarea,
+html.high-contrast select {
+  background: #111 !important;
+  color:      var(--hc-text) !important;
+  border:     2px solid var(--hc-border) !important;
+}
