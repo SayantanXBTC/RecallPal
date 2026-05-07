@@ -114,20 +114,25 @@ supabase_schema.sql            Full database schema with RLS policies
 
 ## Deployment
 
-### Backend → Railway
+### Backend → Render
 
 1. Push this repo to GitHub.
-2. Create a new project at [railway.app](https://railway.app) → Deploy from GitHub.
-3. Railway auto-detects the `Dockerfile`.
-4. Add environment variables in Railway → Variables (same keys as `.env`).
-5. Copy the public Railway URL (e.g. `https://dementia-assist.railway.app`).
+2. Go to [render.com](https://render.com) → New → Web Service → connect your repo.
+3. Set the following in Render's service settings:
+   - **Environment:** Docker
+   - **Branch:** main
+   - **Root Directory:** _(leave blank — Dockerfile is at repo root)_
+4. Add environment variables in Render → Environment (same keys as `.env`).
+5. Click Deploy. Copy the public Render URL (e.g. `https://dementia-assist.onrender.com`).
+
+> **Note:** Render's free tier spins down after 15 minutes of inactivity. The first request after sleep takes ~30s to cold-start. Upgrade to a paid instance ($7/mo) to avoid this.
 
 ### Frontend → Vercel
 
 1. Import the repo at [vercel.com](https://vercel.com) → New Project.
 2. `vercel.json` sets the correct root directory automatically.
 3. Add one environment variable in Vercel → Settings → Environment Variables:
-   - `BACKEND_URL` = your Railway URL from the step above
+   - `BACKEND_URL` = your Render URL from the step above
 4. Deploy.
 
 After first setup, every `git push` to `main` auto-deploys both services.
@@ -348,4 +353,4 @@ Minimum 3 images required. Recommended 8–10 for best accuracy.
 | Face recognition | DeepFace (ArcFace model), OpenCV |
 | Database | Supabase (PostgreSQL + pgvector) |
 | Auth | Supabase Auth (JWT, HS256) |
-| Deployment | Vercel (frontend) + Railway (backend) |
+| Deployment | Vercel (frontend) + Render (backend) |
