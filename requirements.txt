@@ -2,7 +2,7 @@ flask
 flask-cors
 deepface
 tensorflow
-opencv-python
+opencv-python-headless
 numpy
 requests
 supabase
