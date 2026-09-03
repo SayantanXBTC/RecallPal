@@ -46,7 +46,8 @@ Real-time face recognition system that helps dementia patients recognise people 
 
 1. Go to [supabase.com](https://supabase.com) and create a new project.
 2. Open the SQL editor and run `supabase_schema.sql` from the project root to create all tables (`profiles`, `people`, `face_embeddings`, `recognition_events`).
-3. In the Supabase dashboard go to **Settings → API** and copy:
+3. Then run `migrations/001_pgvector_hnsw.sql` to add the denormalised `user_id` column, tuned HNSW index, and the `match_face_embeddings` RPC used for server-side k-NN.
+4. In the Supabase dashboard go to **Settings → API** and copy:
    - **Project URL** → `SUPABASE_URL`
    - **service_role** secret → `SUPABASE_SERVICE_KEY`
    - **anon** public key → `SUPABASE_ANON_KEY`

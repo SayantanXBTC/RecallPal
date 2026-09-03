@@ -367,11 +367,16 @@ class SupabaseEmbeddingStore:
     def save_embedding(
         self, user_id: str, person_name: str, embedding: np.ndarray
     ) -> bool:
-        """Insert one 512-d ArcFace embedding vector into ``face_embeddings``."""
+        """Insert one 512-d ArcFace embedding vector into ``face_embeddings``.
+
+        Denormalised ``user_id`` is set explicitly so the DB-side trigger has
+        nothing to do on the hot path.
+        """
         try:
             person_id = self._get_or_create_person_id(user_id, person_name)
             self._client.table("face_embeddings").insert({
                 "person_id": person_id,
+                "user_id":   user_id,
                 "embedding": embedding.tolist(),
             }).execute()
             return True
@@ -381,6 +386,45 @@ class SupabaseEmbeddingStore:
                 person_name, user_id, exc,
             )
             return False
+
+    def match(
+        self,
+        user_id:      str,
+        embedding:    np.ndarray,
+        top_k:        int   = 5,
+        max_distance: float = 1.5,
+    ) -> list[tuple[str, float]]:
+        """Server-side k-NN search via pgvector HNSW.
+
+        Calls the ``match_face_embeddings`` RPC which is scoped to
+        ``target_user`` and ordered by L2 distance. Returns a list of
+        ``(person_name, distance)`` tuples, aggregated to the best distance
+        per person.
+        """
+        try:
+            resp = self._client.rpc(
+                "match_face_embeddings",
+                {
+                    "query_embedding": embedding.tolist(),
+                    "top_k":           top_k,
+                    "max_distance":    float(max_distance),
+                    "target_user":     user_id,
+                },
+            ).execute()
+        except Exception as exc:
+            logger.error("match_face_embeddings RPC failed for user %s: %s", user_id, exc)
+            return []
+
+        rows = resp.data or []
+        best_per_person: dict[str, float] = {}
+        for row in rows:
+            name = row.get("person_name")
+            dist = row.get("distance")
+            if name is None or dist is None:
+                continue
+            if name not in best_per_person or dist < best_per_person[name]:
+                best_per_person[name] = float(dist)
+        return sorted(best_per_person.items(), key=lambda kv: kv[1])
 
     def load_embeddings(self, user_id: str) -> "dict[str, list[np.ndarray]]":
         """
@@ -530,25 +574,33 @@ class FaceEngine:
         self.user_id:        str   = user_id
         self._store:         SupabaseEmbeddingStore      = SupabaseEmbeddingStore()
         self.database:      dict[str, list[np.ndarray]] = {}
-        # Per-person L2-normalised embedding matrix (N, 512) — used for
-        # nearest-neighbour matching.  Replaces the k-means cluster cache which
-        # produced centroid-drift artefacts on small enrollment batches.
+        # Per-person L2-normalised embedding matrix (N, 512) — used only by
+        # legacy single-face recognize() path. recognize_multi() bypasses this
+        # and calls the pgvector HNSW RPC directly.
         self._emb_cache:    dict[str, np.ndarray]       = {}
+        self._db_loaded:    bool                        = False
         # Rolling window for confidence voting
         self._recog_window: deque[str]                  = deque(maxlen=_WINDOW_SIZE)
-        self.load_database()
+        # Lazy: skip eager load. recognize_multi() never triggers it.
+        # Legacy methods (recognize/enrol/list_people) call _ensure_loaded().
 
     # ------------------------------------------------------------------
     # Database loading
     # ------------------------------------------------------------------
 
+    def _ensure_loaded(self) -> None:
+        """Load embeddings on first legacy access. No-op after first call."""
+        if not self._db_loaded:
+            self.load_database()
+
     def load_database(self) -> None:
         """
         Fetch all embeddings for this user from Supabase and rebuild the
-        cluster-centroid cache.  Prints a startup summary (Fix #4).
+        legacy in-memory cache. Only called by legacy code paths.
         """
         self.database = self._store.load_embeddings(self.user_id)
         self._rebuild_emb_cache()
+        self._db_loaded = True
 
         person_count    = len(self.database)
         embedding_count = sum(len(v) for v in self.database.values())
@@ -719,6 +771,7 @@ class FaceEngine:
             does not reach the threshold.  ``confidence`` is None for
             Unknown results.
         """
+        self._ensure_loaded()
         if not self.database:
             # Still try to detect a face so the frontend can show "Unknown — tap to add"
             try:
@@ -966,10 +1019,13 @@ class FaceEngine:
             }
 
         # Update in-memory database and rebuild cluster cache (Fix #14)
-        if name not in self.database:
-            self.database[name] = []
-        self.database[name].extend(kept_embeddings)
-        self._rebuild_emb_cache()
+        # Only mutate cache if it has already been populated by a legacy call;
+        # otherwise stay lazy — recognize_multi() reads directly from Supabase.
+        if self._db_loaded:
+            if name not in self.database:
+                self.database[name] = []
+            self.database[name].extend(kept_embeddings)
+            self._rebuild_emb_cache()
 
         saved = len(kept_embeddings) - save_failures
         logger.info(
@@ -1041,23 +1097,28 @@ class FaceEngine:
                 results.append(unknown)
                 continue
 
-            if not self.database or not self._emb_cache:
+            # Server-side k-NN via pgvector HNSW. Fetches top-K candidates
+            # under self.threshold; empty result → unknown face.
+            matches = self._store.match(
+                user_id      = self.user_id,
+                embedding    = emb,
+                top_k        = 5,
+                max_distance = float(self.threshold),
+            )
+
+            if not matches:
                 results.append(unknown)
                 continue
 
-            all_dists: list[tuple[str, float]] = []
-            for person_name, normed_matrix in self._emb_cache.items():
-                if len(self.database.get(person_name, [])) < _MIN_PERSON_EMBEDDINGS:
-                    continue
-                dist = self._nearest_distance(emb, normed_matrix)
-                all_dists.append((person_name, dist))
+            best_name, best_dist = matches[0]
 
-            if not all_dists:
-                results.append(unknown)
+            # Enforce per-person minimum embeddings only if cache is populated;
+            # otherwise trust the DB-side filter (RPC already scoped user).
+            if self.database and \
+               len(self.database.get(best_name, [])) < _MIN_PERSON_EMBEDDINGS:
+                # Person under-trained — fall back to unknown.
+                results.append({**unknown, "distance": float(best_dist)})
                 continue
-
-            all_dists.sort(key=lambda z: z[1])
-            best_name, best_dist = all_dists[0]
 
             if best_dist >= self.threshold:
                 results.append({**unknown, "distance": float(best_dist)})
@@ -1080,8 +1141,22 @@ class FaceEngine:
         return {"faces": results}
 
     def list_people(self) -> list[str]:
-        """Return a sorted list of all person names in the in-memory database."""
-        return sorted(self.database.keys())
+        """Return a sorted list of all person names for this user.
+
+        Queries Supabase directly — no dependence on in-memory cache.
+        """
+        try:
+            resp = (
+                self._store._client.table("people")
+                .select("name")
+                .eq("user_id", self.user_id)
+                .execute()
+            )
+            names = [row["name"] for row in (resp.data or []) if row.get("name")]
+            return sorted(set(names))
+        except Exception as exc:
+            logger.error("list_people query failed for user %s: %s", self.user_id, exc)
+            return sorted(self.database.keys())
 
     def delete_person(self, name: str) -> None:
         """Remove a person from the in-memory database and embedding cache."""
