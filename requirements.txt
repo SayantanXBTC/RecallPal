@@ -4,6 +4,7 @@ flask-limiter
 deepface
 tensorflow
 opencv-python-headless
+onnxruntime
 numpy
 requests
 supabase
