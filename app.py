@@ -48,22 +48,27 @@ from supabase_memory import get_memory_manager
 # Authentication helpers
 # ---------------------------------------------------------------------------
 
+def _is_dev_mode() -> bool:
+    """Dev fallback only active when FLASK_ENV=development."""
+    return os.environ.get("FLASK_ENV", "").strip().lower() == "development"
+
+
 def _get_user_id() -> str:
     """
     Return the authenticated user's UUID for the current request.
 
-    When ``@require_auth`` has run (all protected routes), ``flask.g.user_id``
-    is already set — this function just reads it.  For unprotected routes
-    (e.g. ``/api/health``) it falls back to ``DEFAULT_USER_ID``.
+    When ``@require_auth`` has run, ``flask.g.user_id`` is set. For unprotected
+    routes, falls back to ``DEFAULT_USER_ID`` **only in development mode**.
 
     Raises ValueError if no identity is available.
     """
     uid = getattr(g, "user_id", None)
     if uid:
         return uid
-    uid = os.environ.get("DEFAULT_USER_ID", "").strip()
-    if uid:
-        return uid
+    if _is_dev_mode():
+        uid = os.environ.get("DEFAULT_USER_ID", "").strip()
+        if uid:
+            return uid
     raise ValueError("No authenticated user — provide a valid Bearer token.")
 
 
@@ -147,65 +152,61 @@ def require_auth(f):
         jwt_secret = os.environ.get("SUPABASE_JWT_SECRET", "").strip()
 
         if not jwt_secret:
-            # Dev-mode: skip verification, use fallback identity
-            fallback = os.environ.get("DEFAULT_USER_ID", "").strip()
-            if fallback:
-                g.user_id = fallback
-                return f(*args, **kwargs)
+            if _is_dev_mode():
+                fallback = os.environ.get("DEFAULT_USER_ID", "").strip()
+                if fallback:
+                    g.user_id = fallback
+                    return f(*args, **kwargs)
+            logger.error("SUPABASE_JWT_SECRET not configured in production.")
             return jsonify({
                 "status":  "error",
-                "message": "Server authentication is not configured "
-                           "(set SUPABASE_JWT_SECRET or DEFAULT_USER_ID).",
+                "message": "Server authentication is not configured.",
             }), 500
 
         auth_header = request.headers.get("Authorization", "").strip()
         if not auth_header.startswith("Bearer "):
-            logger.warning("Missing or invalid Authorization header. Got: %s", auth_header[:20])
             return jsonify({
                 "status":  "error",
                 "message": "Authorization header missing or not a Bearer token.",
             }), 401
 
-        token = auth_header[7:]   # strip "Bearer "
+        token = auth_header[7:].strip()
+        if not token:
+            return jsonify({"status": "error", "message": "Empty bearer token."}), 401
 
-        payload = None
-        last_exc: Exception | None = None
-
-        # Supabase signs JWTs with the raw secret bytes.
-        import base64
-        candidates = [jwt_secret]
         try:
-            candidates.append(base64.b64decode(jwt_secret))
-        except Exception:
-            pass
-
-        for key in candidates:
-            try:
-                payload = jose_jwt.decode(
-                    token,
-                    key,
-                    algorithms=["HS256", "RS256"],
-                    options={"verify_signature": False, "verify_aud": False, "verify_exp": False},
-                )
-                break   # success — stop trying
-            except JWTError as exc:
-                last_exc = exc
-                logger.debug("JWT attempt failed (%s): %s", type(key).__name__, exc)
-
-        if payload is None:
-            logger.error("JWT VERIFICATION FATAL FAILURE. Token starts with: %s", token[:15])
-            logger.error("Last exception: %s", last_exc)
+            payload = jose_jwt.decode(
+                token,
+                jwt_secret,
+                algorithms=["HS256"],
+                audience="authenticated",
+                options={
+                    "verify_signature": True,
+                    "verify_aud":       True,
+                    "verify_exp":       True,
+                    "verify_iat":       True,
+                    "require":          ["exp", "sub", "aud"],
+                },
+            )
+        except JWTError as exc:
+            logger.warning("JWT verification failed: %s", exc)
             return jsonify({
                 "status":  "error",
-                "message": f"Invalid or expired token. Details: {last_exc}",
+                "message": "Invalid or expired token.",
             }), 401
 
-        user_id = payload.get("sub", "").strip()
+        user_id = (payload.get("sub") or "").strip()
         if not user_id:
-            logger.error("JWT is missing sub claim.")
             return jsonify({
                 "status":  "error",
                 "message": "Token is missing the subject (sub) claim.",
+            }), 401
+
+        if (payload.get("role") or "").strip() == "service_role":
+            logger.warning("Rejected service_role token used as user auth.")
+            return jsonify({
+                "status":  "error",
+                "message": "Service role tokens are not permitted here.",
             }), 401
 
         g.user_id = user_id
@@ -243,7 +244,41 @@ if _env_path.exists():
 # ---------------------------------------------------------------------------
 
 app = Flask(__name__)
-CORS(app)
+
+# CORS — explicit origin allowlist. Comma-separated in ALLOWED_ORIGINS env var.
+# Falls back to localhost dev origins only. Never use "*" with credentials.
+_default_dev_origins = "http://localhost:3000,http://127.0.0.1:3000"
+_allowed_origins = [
+    o.strip()
+    for o in os.environ.get("ALLOWED_ORIGINS", _default_dev_origins).split(",")
+    if o.strip()
+]
+CORS(
+    app,
+    resources={r"/api/*": {"origins": _allowed_origins}},
+    supports_credentials=True,
+    max_age=600,
+)
+logger.info("CORS allowed origins: %s", _allowed_origins)
+
+# Rate limiting — protects expensive endpoints (recognize, add-person) from abuse.
+# Uses in-memory storage by default; set RATELIMIT_STORAGE_URI=redis://... in prod
+# for multi-instance deployments.
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
+def _rate_limit_key() -> str:
+    """Rate limit per authenticated user when possible, else per IP."""
+    uid = getattr(g, "user_id", None)
+    return uid if uid else get_remote_address()
+
+limiter = Limiter(
+    app=app,
+    key_func=_rate_limit_key,
+    storage_uri=os.environ.get("RATELIMIT_STORAGE_URI", "memory://"),
+    default_limits=["1000 per hour"],
+    headers_enabled=True,
+)
 
 # ---------------------------------------------------------------------------
 # Initialise subsystems
@@ -450,6 +485,7 @@ def health():
 
 @app.route("/api/recognize", methods=["POST"])
 @require_auth
+@limiter.limit("30 per minute")
 def recognize():
     """
     Identify all faces in a single webcam frame.
@@ -551,6 +587,7 @@ def recognize():
 
 @app.route("/api/add-person", methods=["POST"])
 @require_auth
+@limiter.limit("10 per hour")
 def add_person():
     """
     Enrol a new person in both the face database and the memory store.
@@ -785,6 +822,7 @@ def update_person():
 
 @app.route("/api/add-photos", methods=["POST"])
 @require_auth
+@limiter.limit("20 per hour")
 def add_photos():
     """
     Append new face embeddings to an already-enrolled person.
@@ -1375,6 +1413,7 @@ def debug_face():
 
 
 @app.route("/api/auth/signup", methods=["POST"])
+@limiter.limit("5 per hour")
 def auth_signup():
     """
     Create a new Supabase Auth user.
@@ -1437,6 +1476,7 @@ def auth_signup():
 
 
 @app.route("/api/auth/login", methods=["POST"])
+@limiter.limit("10 per minute")
 def auth_login():
     """
     Sign in with email and password.
