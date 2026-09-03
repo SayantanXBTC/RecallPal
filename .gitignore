@@ -52,3 +52,15 @@ desktop.ini
 .idea/
 *.swp
 *.swo
+
+# ── Claude / AI tooling (local only) ───────────────────────────────────────
+.claude/
+CLAUDE.md
+.mcp.json
+
+# ── Internal planning docs (private) ───────────────────────────────────────
+docs/superpowers/
+
+# ── Misc ───────────────────────────────────────────────────────────────────
+error.html
+*.pkl
