@@ -618,6 +618,7 @@ def health():
                 "memory_backend": "supabase",
                 "inference":      "remote" if _inf_remote() else "in-process",
                 "enrol_queue":    "redis"  if _enrol_async() else "inline",
+                "assistant":      "claude" if os.environ.get("ANTHROPIC_API_KEY") else "off",
                 "observability":  _OBSERVABILITY,
             }
         )
@@ -1967,6 +1968,29 @@ def auth_reset_password():
         "status":  "success",
         "message": "If that email is registered, a reset link is on its way.",
     })
+
+
+@app.route("/api/assistant/chat", methods=["POST"])
+@require_auth
+@limiter.limit("60 per hour")
+def assistant_chat():
+    """In-app RecallPal helper. Body: { message, history?, context? }."""
+    from assistant import chat as _assistant_chat, is_configured as _assistant_on
+    if not _assistant_on():
+        return jsonify({
+            "status":  "error",
+            "message": "Assistant not configured. Set ANTHROPIC_API_KEY on the server.",
+        }), 503
+    payload  = request.get_json(silent=True) or {}
+    message  = (payload.get("message") or "").strip()
+    history  = payload.get("history")  or []
+    context  = payload.get("context")  or {}
+    if not isinstance(history, list): history = []
+    if not isinstance(context, dict): context = {}
+    if not message and not context:
+        return jsonify({"status": "error", "message": "message is required."}), 400
+    reply = _assistant_chat(user_message=message, history=history, context=context)
+    return jsonify({"status": "success", "reply": reply})
 
 
 @app.route("/api/auth/me", methods=["GET"])

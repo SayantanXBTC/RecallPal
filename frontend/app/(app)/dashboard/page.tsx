@@ -9,6 +9,7 @@ import AddPersonModal from '@/components/AddPersonModal';
 import AddPhotosModal from '@/components/AddPhotosModal';
 import PeopleSidebar  from '@/components/PeopleSidebar';
 import Avatar         from '@/components/Avatar';
+import { useAssistant } from '@/lib/assistant-context';
 import { MultiRecognitionResult } from '@/lib/types';
 import { useTheme } from '@/lib/theme-context';
 import AlertBanner from '@/components/AlertBanner';
@@ -17,7 +18,7 @@ import AccessibilityPanel from '@/components/AccessibilityPanel';
 const IDLE_RESULT: MultiRecognitionResult = { faces: [] };
 
 export default function DashboardPage() {
-  const { logout, user } = useAuth();
+  const { logout, user, token } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const dark = theme === 'dark';
 
@@ -89,6 +90,24 @@ export default function DashboardPage() {
       speakingRef.current = false;
     }
   }, [isMuted]);
+
+  const { publishFaces, publishPage, publishPeople, bindHandlers } = useAssistant();
+
+  useEffect(() => { publishPage('camera'); }, [publishPage]);
+  useEffect(() => { publishFaces(result); }, [result, publishFaces]);
+  useEffect(() => {
+    if (!token) return;
+    fetch('/api/people', { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((d) => publishPeople((d?.people?.length ?? 0)))
+      .catch(() => {});
+  }, [token, refreshPeople, publishPeople]);
+  useEffect(() => {
+    bindHandlers({
+      onAddPerson: () => setIsModalOpen(true),
+      onAddPhotos: (name) => setAddPhotosFor(name),
+    });
+  }, [bindHandlers]);
 
   const handleRecognition = useCallback((r: MultiRecognitionResult) => setResult(r), []);
   const handlePersonAdded = useCallback((name: string) => {

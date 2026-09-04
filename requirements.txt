@@ -15,3 +15,4 @@ rq
 sentry-sdk[flask]
 structlog
 prometheus-client
+anthropic
