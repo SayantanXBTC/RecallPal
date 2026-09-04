@@ -819,8 +819,8 @@ def add_person():
             return jsonify({"status": "error", "message": str(exc)}), 401
         engine = _get_face_engine(user_id)
 
-        # Duplicate name guard — compare case-insensitively
-        existing_names_lower = {n.lower() for n in engine.database}
+        # Duplicate name guard — query DB (engine.database is lazy-loaded).
+        existing_names_lower = {n.lower() for n in engine.list_people()}
         if name.lower() in existing_names_lower:
             return (
                 jsonify({
@@ -1115,7 +1115,10 @@ def add_photos():
         engine = _get_face_engine(user_id)
         name_key = name.lower()
 
-        if name_key not in engine.database:
+        # engine.database is lazily populated — don't trust it as the
+        # authoritative "does this person exist?" check. Query the people
+        # table directly (RLS-scoped to this user).
+        if name_key not in set(engine.list_people()):
             return jsonify({
                 "status":  "error",
                 "message": f"'{name}' is not enrolled. Use Add Person to enroll them first.",
@@ -1167,15 +1170,14 @@ def add_photos():
                 save_failures += 1
 
         added = len(kept_embeddings) - save_failures
-        if added > 0:
-            engine.database[name_key].extend(kept_embeddings[:added])
+        # Only mutate the legacy in-RAM cache if it has been populated; the
+        # HNSW k-NN path reads the DB directly on every recognize tick.
+        if added > 0 and engine._db_loaded:
+            engine.database.setdefault(name_key, []).extend(kept_embeddings[:added])
             engine._rebuild_emb_cache()
 
-        total = len(engine.database[name_key])
-        logger.info(
-            "add-photos: added %d embeddings for '%s' (was %d, now %d).",
-            added, name_key, len(engine.database[name_key]) - added, total,
-        )
+        total = len(engine.database.get(name_key, [])) + (added if not engine._db_loaded else 0)
+        logger.info("add-photos: added %d embeddings for '%s'.", added, name_key)
 
         return jsonify({
             "status":           "success",
