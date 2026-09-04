@@ -69,7 +69,6 @@ Create a project at supabase.com. Open the SQL editor and run these files **in o
 2. `migrations/001_pgvector_hnsw.sql` — denormalised `user_id`, tuned HNSW index, `match_face_embeddings` RPC.
 3. `migrations/002_consent_audit.sql` — `consents` + `audit_log` tables + right-to-erasure RPC.
 4. `migrations/003_profile_avatar.sql` — `display_name` + `avatar_url` on `profiles`.
-5. `migrations/004_conversations.sql` — `conversations` table for per-person captured speech.
 
 Then Settings → API — grab:
 

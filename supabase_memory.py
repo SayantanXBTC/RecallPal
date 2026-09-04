@@ -364,19 +364,13 @@ class MemoryManager:
                 return None
 
             row = result.data[0]
-            # Best-effort conversation lookup — never fails the recall path.
-            try:
-                convos = self.recent_conversations(name_key, limit=3)
-            except Exception:
-                convos = []
             return {
-                "name":                 row.get("name") or name_key,
-                "age":                  row.get("age"),
-                "relation":             row.get("relation") or "",
-                "likes":                row.get("likes") or [],
-                "notes":                row.get("notes") or "",
-                "last_seen":            row.get("last_seen") or "",
-                "recent_conversations": convos,
+                "name":      row.get("name") or name_key,
+                "age":       row.get("age"),
+                "relation":  row.get("relation") or "",
+                "likes":     row.get("likes") or [],
+                "notes":     row.get("notes") or "",
+                "last_seen": row.get("last_seen") or "",
             }
         except Exception as exc:
             logger.error(
@@ -384,68 +378,6 @@ class MemoryManager:
                 name_key, self.user_id, exc,
             )
             return None
-
-    # ------------------------------------------------------------------
-    # Conversation snippets — captured while a person is on camera.
-    # Attributed to the person by name, timestamped, later shown as
-    # "you last spoke about X" cues on the face card.
-    # ------------------------------------------------------------------
-
-    def _person_id_for_name(self, name: str) -> Optional[str]:
-        name_key = (name or "").strip().lower()
-        if not name_key:
-            return None
-        try:
-            r = (
-                self._client.table("people")
-                .select("id")
-                .eq("user_id", self.user_id)
-                .eq("name", name_key)
-                .limit(1)
-                .execute()
-            )
-            return (r.data or [{}])[0].get("id")
-        except Exception as exc:
-            logger.warning("_person_id_for_name failed for %s: %s", name_key, exc)
-            return None
-
-    def add_conversation(self, person_name: str, transcript: str, topics: Optional[list] = None) -> bool:
-        text = (transcript or "").strip()
-        if not text:
-            return False
-        person_id = self._person_id_for_name(person_name)
-        if not person_id:
-            return False
-        try:
-            self._client.table("conversations").insert({
-                "user_id":    self.user_id,
-                "person_id":  person_id,
-                "transcript": text,
-                "topics":     topics or [],
-            }).execute()
-            return True
-        except Exception as exc:
-            logger.warning("add_conversation failed for %s: %s", person_name, exc)
-            return False
-
-    def recent_conversations(self, person_name: str, limit: int = 5) -> list[dict]:
-        person_id = self._person_id_for_name(person_name)
-        if not person_id:
-            return []
-        try:
-            r = (
-                self._client.table("conversations")
-                .select("id, transcript, topics, spoken_at")
-                .eq("user_id",   self.user_id)
-                .eq("person_id", person_id)
-                .order("spoken_at", desc=True)
-                .limit(max(1, min(limit, 20)))
-                .execute()
-            )
-            return r.data or []
-        except Exception as exc:
-            logger.warning("recent_conversations failed for %s: %s", person_name, exc)
-            return []
 
     def get_all_people(self) -> list[dict]:
         """

@@ -384,7 +384,7 @@ def _security_headers(resp):
     # Restrict powerful browser features to what we actually need
     resp.headers.setdefault(
         "Permissions-Policy",
-        "camera=(self), microphone=(self), geolocation=(), payment=()",
+        "camera=(self), microphone=(), geolocation=(), payment=()",
     )
     # HSTS only in prod (browsers cache this — never send in dev over localhost)
     if _IS_PROD:
@@ -1968,41 +1968,6 @@ def auth_reset_password():
         "status":  "success",
         "message": "If that email is registered, a reset link is on its way.",
     })
-
-
-@app.route("/api/conversations", methods=["POST", "GET"])
-@require_auth
-@limiter.limit("300 per hour")
-def conversations_endpoint():
-    """POST { person_name, transcript } to log a snippet.
-    GET  ?person_name=X&limit=N to fetch recent snippets for a person."""
-    try:
-        user_id = _get_user_id()
-    except ValueError as exc:
-        return jsonify({"status": "error", "message": str(exc)}), 401
-
-    mm = get_memory_manager(user_id)
-
-    if request.method == "GET":
-        name  = (request.args.get("person_name") or "").strip().lower()
-        limit = int(request.args.get("limit", "5"))
-        if not name:
-            return jsonify({"status": "error", "message": "person_name is required."}), 400
-        return jsonify({"status": "success", "conversations": mm.recent_conversations(name, limit)})
-
-    payload    = request.get_json(silent=True) or {}
-    person     = (payload.get("person_name") or "").strip().lower()
-    transcript = (payload.get("transcript")  or "").strip()
-    topics     = payload.get("topics") or []
-    if not person or not transcript:
-        return jsonify({"status": "error", "message": "person_name and transcript are required."}), 400
-    if len(transcript) > 2000:
-        transcript = transcript[:2000]
-    if not isinstance(topics, list): topics = []
-    ok = mm.add_conversation(person, transcript, topics)
-    if not ok:
-        return jsonify({"status": "error", "message": "Could not save conversation. Is the person enrolled?"}), 400
-    return jsonify({"status": "success"})
 
 
 @app.route("/api/assistant/chat", methods=["POST"])

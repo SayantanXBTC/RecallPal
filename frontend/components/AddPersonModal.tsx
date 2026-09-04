@@ -503,13 +503,50 @@ export default function AddPersonModal({ isOpen, onClose, onSuccess }: AddPerson
               />
             </div>
 
-            {/* Auto-memory hint (replaces the old Likes / Interests field) */}
-            <div
-              className="rounded-xl px-3 py-2 text-[11px] text-white/60 font-dm-sans leading-relaxed"
-              style={{ background: 'rgba(201,148,58,0.08)', border: '1px solid rgba(201,148,58,0.20)' }}
-            >
-              You don&apos;t need to type their interests. When they visit and speak, RecallPal will
-              remember what was said and remind you next time.
+            {/* Likes */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs text-white/45 font-medium" htmlFor="add-likes">
+                Likes / Interests
+                <span className="text-white/25 font-normal ml-1">(optional)</span>
+              </label>
+              <div className="flex gap-2">
+                <input
+                  id="add-likes"
+                  type="text"
+                  value={likeInput}
+                  onChange={(e) => setLikeInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if ((e.key === 'Enter' || e.key === ',') && likeInput.trim()) {
+                      e.preventDefault();
+                      const tag = likeInput.trim().replace(/,$/, '');
+                      if (tag && !likes.includes(tag)) setLikes((prev) => [...prev, tag]);
+                      setLikeInput('');
+                    }
+                  }}
+                  placeholder="Type an interest, press Enter"
+                  className="glass-input flex-1 rounded-xl px-4 py-2.5 text-sm"
+                />
+              </div>
+              {likes.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-1">
+                  {likes.map((like) => (
+                    <span
+                      key={like}
+                      className="glass flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs text-teal-300/80 border border-teal-400/15"
+                    >
+                      {like}
+                      <button
+                        type="button"
+                        onClick={() => setLikes((prev) => prev.filter((l) => l !== like))}
+                        className="text-white/30 hover:text-red-400/80 transition-colors ml-0.5"
+                        aria-label={`Remove ${like}`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Notes */}

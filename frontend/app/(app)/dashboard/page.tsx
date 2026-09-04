@@ -5,7 +5,6 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import CameraPanel    from '@/components/CameraPanel';
-import ConversationListener from '@/components/ConversationListener';
 import AddPersonModal from '@/components/AddPersonModal';
 import AddPhotosModal from '@/components/AddPhotosModal';
 import PeopleSidebar  from '@/components/PeopleSidebar';
@@ -353,9 +352,6 @@ export default function DashboardPage() {
           })()}
         </span>
       </footer>
-
-      {/* ── Room mic listener — attributes speech to on-screen faces ────── */}
-      <ConversationListener active={true} />
 
       {/* ── Add person modal ─────────────────────────────────────────────── */}
       <AddPersonModal
