@@ -2,14 +2,15 @@
  * /api/add-person — Next.js route handler
  *
  * Why this exists instead of a next.config.js rewrite:
- * Rewrites use a Node HTTP proxy that times out after ~60 s.
- * Face enrollment can take 2-5 minutes (DeepFace × augmentations).
- * A route handler runs to completion with no proxy timeout.
+ * Rewrites use a Node HTTP proxy that times out after ~60 s. Face
+ * enrolment (insightface + quality filter + N Supabase inserts) can
+ * take 30–90 s and occasionally longer on cold pods, so we forward
+ * the request through a route handler that has no proxy timeout.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 
-const FLASK = 'http://localhost:5000';
+const FLASK = process.env.BACKEND_URL || 'http://localhost:5000';
 
 export async function POST(req: NextRequest) {
   const auth = req.headers.get('authorization') ?? '';

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const FLASK = 'http://localhost:5000';
+const FLASK = process.env.BACKEND_URL || 'http://localhost:5000';
 
 export async function POST(req: NextRequest) {
   const auth = req.headers.get('authorization') ?? '';

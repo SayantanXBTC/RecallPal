@@ -4,7 +4,8 @@ export async function GET(req: NextRequest) {
   const date  = req.nextUrl.searchParams.get('date') ?? '';
   const auth  = req.headers.get('authorization') ?? '';
   const query = date ? `?date=${encodeURIComponent(date)}` : '';
-  const url   = `http://localhost:5000/api/summary/daily${query}`;
+  const base  = process.env.BACKEND_URL || 'http://localhost:5000';
+  const url   = `${base}/api/summary/daily${query}`;
 
   try {
     const res         = await fetch(url, {
