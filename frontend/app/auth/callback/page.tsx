@@ -86,10 +86,16 @@ export default function AuthCallbackPage() {
         return;
       }
 
+      const meta = session.user.user_metadata || {};
       hydrateSession(
         session.access_token,
         session.refresh_token,
-        { id: session.user.id, email: session.user.email ?? '' },
+        {
+          id:            session.user.id,
+          email:         session.user.email ?? '',
+          display_name:  meta.full_name || meta.name || null,
+          avatar_url:    meta.avatar_url || meta.picture || null,
+        },
         session.expires_in ?? 3600,
       );
       // Wipe tokens from history before navigating away.

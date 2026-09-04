@@ -17,11 +17,20 @@ const NAV_LINKS = [
 
 export default function Navbar() {
   const { theme, toggleTheme } = useTheme();
-  const { user, loading } = useAuth();
+  const { user, loading, refreshProfile } = useAuth();
   const [open,     setOpen]     = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const dark = theme === 'dark';
   const authed = !loading && !!user;
+
+  // If a returning user was persisted before avatar/display_name were
+  // captured (older localStorage schema, or hydrateSession w/o metadata),
+  // fetch the enriched profile once so the header shows their real photo.
+  useEffect(() => {
+    if (authed && user && !user.avatar_url && !user.display_name) {
+      void refreshProfile();
+    }
+  }, [authed, user, refreshProfile]);
 
   useEffect(() => {
     const fn = () => setScrolled(window.scrollY > 20);
