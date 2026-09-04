@@ -5,6 +5,7 @@ deepface
 tensorflow
 opencv-python-headless
 onnxruntime
+insightface
 numpy
 requests
 supabase

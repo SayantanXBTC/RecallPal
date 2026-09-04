@@ -46,10 +46,97 @@ import onnxruntime as ort
 
 logger = logging.getLogger(__name__)
 
-# Haar-cascade for fast face detection (ships with every OpenCV install)
+# Haar-cascade retained as a last-resort fallback if insightface fails to
+# initialise (e.g. offline build with no model weights). Primary path is the
+# insightface FaceAnalysis pipeline defined below.
 _FACE_CASCADE = cv2.CascadeClassifier(
     cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
 )
+
+# ---------------------------------------------------------------------------
+# insightface FaceAnalysis — RetinaFace detection + ArcFace embedding in a
+# single, landmark-aligned forward pass.  Replaces Haar + separate ArcFace.
+# ---------------------------------------------------------------------------
+_FACE_APP = None                       # type: ignore[var-annotated]
+_FACE_APP_LOCK = threading.Lock()
+_INSIGHTFACE_DET_SIZE = (640, 640)
+
+
+def _get_face_app():
+    """Lazy-initialise a process-wide insightface FaceAnalysis instance.
+
+    Uses ``buffalo_l`` (RetinaFace-10G detector + ArcFace r100 embedder).
+    Model weights live at ``~/.insightface/models/buffalo_l/`` — the same
+    directory already populated by _ensure_arcface_model(), so no extra
+    download is needed if that path is already warm.
+
+    Provider order prefers CUDA when available, falls back to CPU.
+    """
+    global _FACE_APP
+    if _FACE_APP is not None:
+        return _FACE_APP
+    with _FACE_APP_LOCK:
+        if _FACE_APP is not None:
+            return _FACE_APP
+        try:
+            from insightface.app import FaceAnalysis
+        except ImportError as exc:
+            logger.warning("insightface not installed (%s) — falling back to Haar+ArcFace.", exc)
+            return None
+        try:
+            available = ort.get_available_providers()
+        except Exception:
+            available = ["CPUExecutionProvider"]
+        providers = [p for p in ("CUDAExecutionProvider", "CPUExecutionProvider") if p in available]
+        if not providers:
+            providers = ["CPUExecutionProvider"]
+        app = FaceAnalysis(name="buffalo_l", providers=providers)
+        ctx_id = 0 if "CUDAExecutionProvider" in providers else -1
+        app.prepare(ctx_id=ctx_id, det_size=_INSIGHTFACE_DET_SIZE)
+        # Warm-up: first call is slow due to graph optimisation.
+        try:
+            app.get(np.zeros((_INSIGHTFACE_DET_SIZE[1], _INSIGHTFACE_DET_SIZE[0], 3), dtype=np.uint8))
+        except Exception:
+            pass
+        _FACE_APP = app
+        logger.info(
+            "face_engine: insightface FaceAnalysis(buffalo_l) ready. providers=%s det_size=%s",
+            providers, _INSIGHTFACE_DET_SIZE,
+        )
+    return _FACE_APP
+
+
+def _analyze_frame(frame: np.ndarray) -> list[dict]:
+    """Detect + embed all faces in *frame* with insightface.
+
+    Returns a list of dicts with keys: ``bbox`` (x, y, w, h),
+    ``embedding`` (np.float32, 512-d, L2-normalised).  Empty list on failure
+    or when no face is detected.
+    """
+    app = _get_face_app()
+    if app is None:
+        return []
+    try:
+        faces = app.get(frame)
+    except Exception as exc:
+        logger.warning("insightface app.get failed: %s", exc)
+        return []
+    out: list[dict] = []
+    for f in faces:
+        x1, y1, x2, y2 = f.bbox.astype(int).tolist()
+        w = max(0, x2 - x1)
+        h = max(0, y2 - y1)
+        emb = getattr(f, "normed_embedding", None)
+        if emb is None:
+            raw = getattr(f, "embedding", None)
+            if raw is None:
+                continue
+            emb = raw / (np.linalg.norm(raw) + 1e-8)
+        out.append({
+            "bbox":      (int(x1), int(y1), int(w), int(h)),
+            "embedding": np.asarray(emb, dtype=np.float32),
+        })
+    return out
 
 # Padding fraction added around each detected face crop
 _CROP_PAD = 0.20
@@ -159,11 +246,12 @@ def _resolve_model_name() -> str:
     if _resolved_model is not None:
         return _resolved_model
     try:
-        logger.info("face_engine: loading ArcFace ONNX model (may download ~300 MB) …")
-        _get_ort_session()
-        logger.info("face_engine: ArcFace ONNX loaded successfully.")
+        logger.info("face_engine: warming insightface FaceAnalysis (buffalo_l) …")
+        if _get_face_app() is None:
+            logger.info("face_engine: insightface unavailable — loading raw ArcFace ONNX fallback …")
+            _get_ort_session()
     except Exception as exc:
-        logger.error("face_engine: ArcFace ONNX load failed: %s", exc)
+        logger.error("face_engine: model warm-up failed: %s", exc)
     _resolved_model = "ArcFace"
     return _resolved_model
 
@@ -684,21 +772,21 @@ class FaceEngine:
 
     def _get_embedding_from_frame(self, frame: np.ndarray) -> Optional[np.ndarray]:
         """
-        Generate an embedding from *frame*.
+        Generate a landmark-aligned, L2-normalised 512-d embedding from *frame*.
 
-        Pipeline:
-        1. Try OpenCV crop → run DeepFace on cropped region.
-        2. If crop is None OR DeepFace fails on crop, fall back to full frame.
-        3. Returns None only when both paths fail.
+        Primary path: insightface FaceAnalysis (RetinaFace + ArcFace r100)
+        — picks the largest detected face and returns its normed embedding.
+
+        Fallback path: legacy Haar crop → raw ArcFace ONNX → L2 normalise.
+        Used only when insightface fails to initialise (offline builds).
         """
-        cropped = _crop_largest_face(frame)
-        if cropped is None:
-            logger.debug("No crop found — using full frame fallback.")
+        analyses = _analyze_frame(frame)
+        if analyses:
+            largest = max(analyses, key=lambda a: a["bbox"][2] * a["bbox"][3])
+            return largest["embedding"]
 
-        # Apply CLAHE (contrast-limited adaptive histogram equalisation) to the
-        # L channel of the crop in LAB space.  This normalises dark / backlit
-        # webcam frames without distorting hue/saturation, keeping the
-        # embedding closer to enrollment photos taken in different lighting.
+        # ---- Fallback: legacy Haar + raw ArcFace ONNX ---------------------
+        cropped = _crop_largest_face(frame)
         if cropped is not None:
             try:
                 lab  = cv2.cvtColor(cropped, cv2.COLOR_BGR2LAB)
@@ -707,13 +795,14 @@ class FaceEngine:
                 l     = clahe.apply(l)
                 cropped = cv2.cvtColor(cv2.merge([l, a, b]), cv2.COLOR_LAB2BGR)
             except Exception:
-                pass  # if CLAHE fails, continue with original crop
+                pass
 
         for label, img in (("crop", cropped), ("full_frame", frame)):
             if img is None:
                 continue
             try:
                 emb = _arcface_embedding(img)
+                emb = emb / (np.linalg.norm(emb) + 1e-8)
                 if label == "full_frame" and cropped is not None:
                     logger.debug("ArcFace on crop failed — full frame fallback succeeded.")
                 return emb
@@ -1065,37 +1154,36 @@ class FaceEngine:
             return {"faces": []}
 
         fh, fw = frame.shape[:2]
-        bboxes = _detect_all_faces(frame)
 
-        if not bboxes:
-            return {"faces": []}
+        # Single-pass insightface: RetinaFace detection + landmark-aligned
+        # ArcFace embedding in one forward pass. Replaces Haar + separate
+        # ArcFace ONNX call, and delivers already-L2-normalised embeddings.
+        analyses = _analyze_frame(frame)
 
-        if not self._emb_cache:
-            self._rebuild_emb_cache()
+        # Fallback path if insightface unavailable at runtime.
+        if not analyses:
+            bboxes = _detect_all_faces(frame)
+            if not bboxes:
+                return {"faces": []}
+            analyses = []
+            for (x, y, w, h) in bboxes:
+                crop = _crop_face(frame, x, y, w, h)
+                try:
+                    emb = _arcface_embedding(crop)
+                    emb = emb / (np.linalg.norm(emb) + 1e-8)
+                except Exception:
+                    continue
+                analyses.append({"bbox": (x, y, w, h), "embedding": emb})
+            if not analyses:
+                return {"faces": []}
 
         results = []
-        for (x, y, w, h) in bboxes:
-            crop = _crop_face(frame, x, y, w, h)
-
-            # CLAHE normalisation — same pipeline as single-face recognize()
-            try:
-                lab = cv2.cvtColor(crop, cv2.COLOR_BGR2LAB)
-                l_ch, a_ch, b_ch = cv2.split(lab)
-                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-                l_ch = clahe.apply(l_ch)
-                crop = cv2.cvtColor(cv2.merge([l_ch, a_ch, b_ch]), cv2.COLOR_LAB2BGR)
-            except Exception:
-                pass
-
+        for item in analyses:
+            x, y, w, h = item["bbox"]
+            emb = item["embedding"]
             bbox_dict = {"x": x, "y": y, "w": w, "h": h}
             unknown = {"name": "Unknown", "confidence": None, "distance": None,
                        "bbox": bbox_dict, "frame_width": fw, "frame_height": fh}
-
-            try:
-                emb = _arcface_embedding(crop)
-            except Exception:
-                results.append(unknown)
-                continue
 
             # Server-side k-NN via pgvector HNSW. Fetches top-K candidates
             # under self.threshold; empty result → unknown face.
