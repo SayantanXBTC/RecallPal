@@ -2,15 +2,26 @@
 
 import { useEffect, useState } from 'react';
 
-/** Reusable avatar: shows the image if present and loadable, otherwise a
- *  gradient initial. The fallback letter never renders behind a still-
- *  loading <img> — we wait for onLoad / onError before deciding. */
+/** Reusable avatar. Renders the image if present and loadable, otherwise
+ *  a gradient initial. Two design decisions worth noting:
+ *
+ *  - Module-level caches (LOADED / FAILED) survive component unmount, so
+ *    navigating between routes doesn't re-trigger the "S initial → image"
+ *    flicker. Once a URL has loaded successfully in this tab, subsequent
+ *    mounts start straight in the 'ok' state.
+ *  - onError only marks a URL as failed after the second consecutive
+ *    failure. Google's avatar CDN occasionally rate-limits a fresh mount;
+ *    the image usually succeeds on the retry the browser does on its
+ *    own, so a one-shot error shouldn't lock us into the fallback. */
 interface AvatarProps {
   src?:  string | null;
   name?: string | null;
   size?: number;
   ring?: boolean;
 }
+
+const LOADED_URLS: Set<string> = new Set();
+const FAILED_STRIKES: Map<string, number> = new Map();
 
 function initial(name?: string | null): string {
   const n = (name || '').trim();
@@ -26,9 +37,19 @@ function hueFor(seed: string): number {
 
 export default function Avatar({ src, name, size = 36, ring = false }: AvatarProps) {
   const dim = `${size}px`;
-  const [state, setState] = useState<'idle' | 'ok' | 'err'>(src ? 'idle' : 'err');
+  const initialState: 'ok' | 'idle' | 'err' =
+    !src ? 'err'
+      : LOADED_URLS.has(src) ? 'ok'
+      : (FAILED_STRIKES.get(src) ?? 0) >= 2 ? 'err'
+      : 'idle';
+  const [state, setState] = useState<'idle' | 'ok' | 'err'>(initialState);
 
-  useEffect(() => { setState(src ? 'idle' : 'err'); }, [src]);
+  useEffect(() => {
+    if (!src) { setState('err'); return; }
+    if (LOADED_URLS.has(src)) { setState('ok'); return; }
+    if ((FAILED_STRIKES.get(src) ?? 0) >= 2) { setState('err'); return; }
+    setState('idle');
+  }, [src]);
 
   const ringStyle = ring
     ? { boxShadow: '0 0 0 2px rgba(201,148,58,0.35), 0 2px 8px rgba(201,148,58,0.25)' }
@@ -50,17 +71,27 @@ export default function Avatar({ src, name, size = 36, ring = false }: AvatarPro
       }}
     >
       {state !== 'ok' && <span aria-hidden>{initial(name)}</span>}
-      {src && (
+      {src && state !== 'err' && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={src}
           alt=""
           width={size} height={size}
-          onLoad={()  => setState('ok')}
-          onError={() => setState('err')}
+          onLoad={() => {
+            LOADED_URLS.add(src);
+            FAILED_STRIKES.delete(src);
+            setState('ok');
+          }}
+          onError={() => {
+            const strikes = (FAILED_STRIKES.get(src) ?? 0) + 1;
+            FAILED_STRIKES.set(src, strikes);
+            if (strikes >= 2) setState('err');
+            // otherwise stay in 'idle' — the browser will retry on the
+            // next render or route change without us re-issuing the src.
+          }}
           referrerPolicy="no-referrer"
           className="absolute inset-0 w-full h-full object-cover"
-          style={{ display: state === 'err' ? 'none' : 'block', opacity: state === 'ok' ? 1 : 0 }}
+          style={{ opacity: state === 'ok' ? 1 : 0 }}
         />
       )}
     </div>
