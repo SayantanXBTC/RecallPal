@@ -39,11 +39,15 @@ export default function ConversationListener({ active }: Props) {
     if (typeof window === 'undefined') return;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SRClass: any = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SRClass) return;   // Firefox etc — silently no-op
+    if (!SRClass) {
+      console.log('[listener] Web Speech Recognition not supported in this browser. Try Chrome or Edge.');
+      return;
+    }
 
     if (!active) { shouldRun.current = false; try { recRef.current?.stop(); } catch { /* ignore */ } return; }
 
     shouldRun.current = true;
+    console.log('[listener] starting speech capture. Grant microphone permission if prompted.');
 
     const start = () => {
       if (!shouldRun.current) return;
@@ -53,6 +57,8 @@ export default function ConversationListener({ active }: Props) {
       rec.interimResults  = false;
       rec.maxAlternatives = 1;
 
+      rec.onstart = () => console.log('[listener] mic open, listening…');
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       rec.onresult = (e: any) => {
         const results = e.results;
@@ -61,23 +67,36 @@ export default function ConversationListener({ active }: Props) {
           if (!r.isFinal) continue;
           const text = (r[0]?.transcript || '').trim();
           if (!text || text.length < 3) continue;
-          const recognized = (facesRef.current || []).find(
+
+          // Attribute the utterance to EVERY known face on screen right
+          // now. If a group is present we can't tell who spoke, so
+          // broadcast the memory — each person's card gets the snippet
+          // and the caregiver can review per person later.
+          const knownFaces = (facesRef.current || []).filter(
             (f) => f.status === 'recognized' && f.name,
           );
-          if (!recognized?.name) {
-            console.debug('[listener] heard but no known face — discarded:', text);
+          if (knownFaces.length === 0) {
+            console.log('[listener] heard but no known face — discarded:', text);
             continue;
           }
           const t = tokenRef.current;
-          if (!t) return;
-          console.debug('[listener] saving for', recognized.name, ':', text);
-          void fetch('/api/conversations', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t}` },
-            body:    JSON.stringify({ person_name: recognized.name, transcript: text }),
-          }).then((r) => {
-            if (!r.ok) r.text().then((body) => console.warn('[listener] save failed', r.status, body));
-          }).catch((err) => console.warn('[listener] save fetch error', err));
+          if (!t) { console.warn('[listener] no auth token — skip'); return; }
+
+          const names = knownFaces.map((f) => f.name).join(', ');
+          console.log(`[listener] saving for ${names}:`, text);
+
+          for (const face of knownFaces) {
+            void fetch('/api/conversations', {
+              method:  'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t}` },
+              body:    JSON.stringify({ person_name: face.name, transcript: text }),
+            }).then(async (res) => {
+              if (!res.ok) {
+                const body = await res.text().catch(() => '');
+                console.warn('[listener] save failed', face.name, res.status, body);
+              }
+            }).catch((err) => console.warn('[listener] save fetch error', face.name, err));
+          }
         }
       };
 
@@ -89,15 +108,22 @@ export default function ConversationListener({ active }: Props) {
         }
       };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      rec.onerror = (_e: any) => {
-        // Common: 'no-speech', 'network', 'aborted'. Restart quietly.
+      rec.onerror = (e: any) => {
+        const kind = e?.error || 'unknown';
+        if (kind === 'not-allowed' || kind === 'service-not-allowed') {
+          console.warn('[listener] microphone permission denied. Allow the mic in browser settings and reload.');
+          shouldRun.current = false;
+          return;
+        }
+        // 'no-speech', 'aborted', 'network' — restart quietly.
+        console.log('[listener] transient error, restarting:', kind);
         if (shouldRun.current) {
-          setTimeout(() => { try { start(); } catch { /* ignore */ } }, 500);
+          setTimeout(() => { try { start(); } catch { /* ignore */ } }, 600);
         }
       };
 
       recRef.current = rec;
-      try { rec.start(); } catch { /* already running */ }
+      try { rec.start(); } catch (err) { console.warn('[listener] start() threw:', err); }
     };
 
     start();
