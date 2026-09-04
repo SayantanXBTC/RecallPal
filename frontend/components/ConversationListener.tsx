@@ -132,16 +132,29 @@ export default function ConversationListener({ active }: Props) {
       try { rec.start(); } catch (err) { console.warn('[listener] start() threw:', err); }
     };
 
-    // Wait for the first user gesture before start(). Chrome / Edge
-    // require this before SpeechRecognition will initialise the mic.
+    // Wait for the first user gesture, then explicitly request mic
+    // permission via getUserMedia — Chrome no longer prompts for mic
+    // via SpeechRecognition alone, so without this the SR call throws
+    // 'not-allowed' silently and the user never sees a dialog.
     let started = false;
-    const kick = () => {
+    const kick = async () => {
       if (started || !shouldRun.current) return;
       started = true;
-      console.log('[listener] user gesture detected — starting mic.');
       window.removeEventListener('pointerdown', kick, true);
       window.removeEventListener('keydown',     kick, true);
-      start();
+      console.log('[listener] user gesture — requesting microphone…');
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // We don't need the raw audio; SpeechRecognition opens its
+        // own track. Close the stream immediately after the browser
+        // records the permission grant.
+        stream.getTracks().forEach((t) => t.stop());
+        console.log('[listener] mic permission granted — starting speech recognition.');
+        start();
+      } catch (err) {
+        console.warn('[listener] microphone permission was refused:', err);
+        shouldRun.current = false;
+      }
     };
     if (armed && recRef.current) {
       // Already running from a previous mount — no need to re-gate.
