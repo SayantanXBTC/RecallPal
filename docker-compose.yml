@@ -1,0 +1,67 @@
+# Split-service topology for local dev / staging.
+#
+# Services:
+#   web         Flask REST API + auth.  Stateless. Scale replicas freely.
+#   inference   insightface GPU/CPU worker.  Single service; single insight-
+#               face process holds the model in memory (~500 MB RAM / VRAM).
+#   worker      RQ worker for async enrolment jobs.  Scale as needed.
+#   redis       Job queue + result store.  Use Upstash/managed in prod.
+#
+# Bring up:  docker compose up --build
+# Health:    curl http://localhost:5000/api/health
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  inference:
+    build:
+      context: .
+      dockerfile: Dockerfile.inference
+    environment:
+      INFERENCE_SHARED_TOKEN: ${INFERENCE_SHARED_TOKEN}
+    ports: ["8001:8001"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8001/health').status==200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    environment:
+      REDIS_URL:              redis://redis:6379/0
+      SUPABASE_URL:           ${SUPABASE_URL}
+      SUPABASE_SERVICE_KEY:   ${SUPABASE_SERVICE_KEY}
+      INFERENCE_URL:          http://inference:8001
+      INFERENCE_SHARED_TOKEN: ${INFERENCE_SHARED_TOKEN}
+    depends_on:
+      redis:      { condition: service_healthy }
+      inference:  { condition: service_healthy }
+
+  web:
+    build: .
+    ports: ["5000:8000"]
+    environment:
+      SUPABASE_URL:           ${SUPABASE_URL}
+      SUPABASE_SERVICE_KEY:   ${SUPABASE_SERVICE_KEY}
+      SUPABASE_ANON_KEY:      ${SUPABASE_ANON_KEY}
+      SUPABASE_JWT_SECRET:    ${SUPABASE_JWT_SECRET}
+      FLASK_SECRET_KEY:       ${FLASK_SECRET_KEY}
+      ALLOWED_ORIGINS:        ${ALLOWED_ORIGINS:-http://localhost:3000}
+      RATELIMIT_STORAGE_URI:  redis://redis:6379/1
+      REDIS_URL:              redis://redis:6379/0
+      INFERENCE_URL:          http://inference:8001
+      INFERENCE_SHARED_TOKEN: ${INFERENCE_SHARED_TOKEN}
+    depends_on:
+      redis:      { condition: service_healthy }
+      inference:  { condition: service_healthy }

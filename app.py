@@ -470,12 +470,16 @@ def health():
         except ValueError:
             people_count  = 0
             face_db_loaded = False
+        from inference_client import is_remote_enabled as _inf_remote
+        from enrol_queue import is_async_enabled as _enrol_async
         return jsonify(
             {
                 "status": "ok",
                 "face_db_loaded": face_db_loaded,
                 "people_count": people_count,
                 "memory_backend": "supabase",
+                "inference":      "remote" if _inf_remote() else "in-process",
+                "enrol_queue":    "redis"  if _enrol_async() else "inline",
             }
         )
     except Exception:
@@ -654,6 +658,23 @@ def add_person():
             "Adding person '%s' (%s) with %d image(s).", name, relation, len(images)
         )
 
+        # Optional async path: when the caller sets ?async=true or the
+        # X-Async: 1 header AND Redis is configured, dispatch to the RQ
+        # worker on the GPU pod and return 202 with a job_id.
+        want_async = (
+            request.args.get("async", "").lower() in {"1", "true", "yes"}
+            or request.headers.get("X-Async", "").strip() in {"1", "true"}
+        )
+        from enrol_queue import enqueue_enrol, is_async_enabled as _enrol_async_on
+        if want_async and _enrol_async_on():
+            job = enqueue_enrol(user_id, name, relation, notes, age, likes, images)
+            return jsonify({
+                "status": "queued",
+                "name":   name,
+                "job_id": job["job_id"],
+                "message": f"Enrolment for {name} accepted. Poll /api/enrol-status/{job['job_id']}.",
+            }), 202
+
         # Generate embeddings and save to Supabase
         engine_result = engine.add_person(name, images)
 
@@ -703,6 +724,12 @@ def add_person():
         )
 
 
+@app.route("/api/enrol-status/<job_id>", methods=["GET"])
+@require_auth
+def enrol_status(job_id: str):
+    """Poll status of an async enrolment job dispatched via ?async=true."""
+    from enrol_queue import get_job_status
+    return jsonify(get_job_status(job_id))
 
 
 @app.route("/api/people", methods=["GET"])

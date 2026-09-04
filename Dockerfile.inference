@@ -1,0 +1,24 @@
+FROM python:3.11-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libglib2.0-0 libsm6 libxext6 libxrender-dev libgomp1 libgl1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY face_engine.py inference_service.py inference_client.py enrol_queue.py supabase_memory.py ./
+
+# Pre-download buffalo_l weights (~300 MB) at build time so the first
+# request never pays the cold-start download.
+RUN python -c "from insightface.app import FaceAnalysis; FaceAnalysis(name='buffalo_l').prepare(ctx_id=-1)"
+
+ENV INFERENCE_PORT=8001
+
+EXPOSE 8001
+
+# Single worker per GPU pod — insightface holds the model in RAM/VRAM.
+CMD ["gunicorn", "inference_service:app", \
+     "--bind", "0.0.0.0:8001", "--workers", "1", "--threads", "2", "--timeout", "60"]

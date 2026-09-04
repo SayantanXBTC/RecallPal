@@ -1156,9 +1156,10 @@ class FaceEngine:
         fh, fw = frame.shape[:2]
 
         # Single-pass insightface: RetinaFace detection + landmark-aligned
-        # ArcFace embedding in one forward pass. Replaces Haar + separate
-        # ArcFace ONNX call, and delivers already-L2-normalised embeddings.
-        analyses = _analyze_frame(frame)
+        # ArcFace embedding in one forward pass. Delegates to inference
+        # microservice when INFERENCE_URL is set, else runs in-process.
+        from inference_client import analyze_frame as _remote_or_local_analyze
+        analyses = _remote_or_local_analyze(frame)
 
         # Fallback path if insightface unavailable at runtime.
         if not analyses:
