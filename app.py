@@ -384,7 +384,7 @@ def _security_headers(resp):
     # Restrict powerful browser features to what we actually need
     resp.headers.setdefault(
         "Permissions-Policy",
-        "camera=(self), microphone=(), geolocation=(), payment=()",
+        "camera=(self), microphone=(self), geolocation=(), payment=()",
     )
     # HSTS only in prod (browsers cache this — never send in dev over localhost)
     if _IS_PROD:
