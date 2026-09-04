@@ -225,6 +225,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Observability (Sentry + structlog + metrics). init_observability() is
+# called below after the Flask app is constructed. Importing here so
+# Sentry can catch exceptions thrown during .env parsing / Supabase init.
+from observability import init_observability, record_recognize, log as struct_log
+
 # ---------------------------------------------------------------------------
 # Load .env file if present (simple parser — no extra dependencies)
 # ---------------------------------------------------------------------------
@@ -279,6 +284,11 @@ limiter = Limiter(
     default_limits=["1000 per hour"],
     headers_enabled=True,
 )
+
+# Sentry + structlog + Prometheus. Attaches before/after handlers that
+# bind request_id and emit http_request logs + metrics.
+_OBSERVABILITY = init_observability(app)
+struct_log.info("boot", **_OBSERVABILITY)
 
 # ---------------------------------------------------------------------------
 # Initialise subsystems
@@ -480,6 +490,7 @@ def health():
                 "memory_backend": "supabase",
                 "inference":      "remote" if _inf_remote() else "in-process",
                 "enrol_queue":    "redis"  if _enrol_async() else "inline",
+                "observability":  _OBSERVABILITY,
             }
         )
     except Exception:
@@ -582,11 +593,48 @@ def recognize():
                 "frame_height": frame_height,
             })
 
+        n_recognized = sum(1 for f in faces_out if f.get("status") == "recognized")
+        record_recognize(n_faces=len(faces_out), n_recognized=n_recognized)
+        struct_log.info(
+            "recognize",
+            n_faces=len(faces_out), n_recognized=n_recognized,
+        )
         return jsonify({"faces": faces_out})
 
     except Exception:
         logger.error("Error in POST /api/recognize:\n%s", traceback.format_exc())
         return jsonify({"faces": [], "status": "error", "message": "Recognition failed unexpectedly"}), 500
+
+
+@app.route("/api/ready", methods=["GET"])
+def ready():
+    """Readiness probe: distinct from /health (which only proves the
+    process responds). /ready verifies external dependencies:
+      - Supabase reachable
+      - Inference microservice reachable (when remote mode is on)
+    Returns 503 when any dependency is degraded.
+    """
+    checks: dict[str, bool] = {}
+    try:
+        from supabase_memory import get_memory_manager
+        get_memory_manager("00000000-0000-0000-0000-000000000000")._client.table("people").select("id").limit(1).execute()
+        checks["supabase"] = True
+    except Exception:
+        checks["supabase"] = False
+
+    try:
+        from inference_client import is_remote_enabled, _INFERENCE_URL, _INFERENCE_TOKEN
+        if is_remote_enabled():
+            import requests as _r
+            r = _r.get(f"{_INFERENCE_URL}/health", timeout=1.5)
+            checks["inference"] = (r.status_code == 200)
+        else:
+            checks["inference"] = True
+    except Exception:
+        checks["inference"] = False
+
+    healthy = all(checks.values())
+    return jsonify({"status": "ok" if healthy else "degraded", "checks": checks}), (200 if healthy else 503)
 
 
 @app.route("/api/add-person", methods=["POST"])

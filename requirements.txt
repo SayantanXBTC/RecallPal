@@ -14,3 +14,6 @@ scikit-learn
 gunicorn
 redis
 rq
+sentry-sdk[flask]
+structlog
+prometheus-client
