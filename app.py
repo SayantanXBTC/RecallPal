@@ -1984,17 +1984,123 @@ def auth_me():
         token    = request.headers["Authorization"][7:]   # strip "Bearer "
         resp     = _get_auth_client().auth.get_user(token)
         user     = resp.user
+
+        # Pull profile row (display_name, avatar_url).  If missing (e.g.
+        # first request after signup), auto-create with sensible defaults
+        # derived from the user's email + OAuth metadata.
+        from face_engine import SupabaseEmbeddingStore
+        svc = SupabaseEmbeddingStore()._client
+
+        profile_row = None
+        try:
+            r = svc.table("profiles").select("display_name, avatar_url").eq("id", user.id).limit(1).execute()
+            profile_row = (r.data or [None])[0]
+        except Exception as exc:
+            logger.warning("profiles fetch failed for %s: %s", user.id, exc)
+
+        # Prefer stored profile fields; fall back to OAuth metadata (Google
+        # avatar, full name) and finally to the email local-part.
+        meta = getattr(user, "user_metadata", None) or {}
+        google_avatar = meta.get("avatar_url") or meta.get("picture") or ""
+        google_name   = meta.get("full_name")  or meta.get("name")    or ""
+
+        display_name  = (profile_row or {}).get("display_name") or google_name or (user.email or "").split("@")[0]
+        avatar_url    = (profile_row or {}).get("avatar_url")   or google_avatar or ""
+
+        # If nothing was stored yet, seed the profile so the values are
+        # stable across sessions (and so the trigger stamps updated_at).
+        if not profile_row:
+            try:
+                svc.table("profiles").upsert({
+                    "id":           user.id,
+                    "display_name": display_name,
+                    "avatar_url":   avatar_url or None,
+                }).execute()
+            except Exception as exc:
+                logger.warning("profile upsert failed for %s: %s", user.id, exc)
+
         return jsonify({
             "status": "success",
             "user": {
-                "id":         user.id,
-                "email":      user.email,
-                "created_at": str(user.created_at) if user.created_at else None,
+                "id":           user.id,
+                "email":        user.email,
+                "created_at":   str(user.created_at) if user.created_at else None,
+                "display_name": display_name,
+                "avatar_url":   avatar_url or None,
             },
         })
     except Exception as exc:
         logger.error("Error in GET /api/auth/me:\n%s", traceback.format_exc())
         return jsonify({"status": "error", "message": str(exc)}), 400
+
+
+# ---------------------------------------------------------------------------
+# Profile update endpoints
+# ---------------------------------------------------------------------------
+
+_MAX_AVATAR_BYTES = 512 * 1024   # 512 KB after base64 decode
+
+
+@app.route("/api/me/profile", methods=["POST"])
+@require_auth
+@limiter.limit("30 per hour")
+def update_profile():
+    """Update display_name for the current user."""
+    payload      = request.get_json(silent=True) or {}
+    display_name = (payload.get("display_name") or "").strip()
+    if not display_name or len(display_name) > 80:
+        return jsonify({"status": "error", "message": "Display name must be 1–80 characters."}), 400
+    try:
+        user_id = _get_user_id()
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 401
+    from face_engine import SupabaseEmbeddingStore
+    SupabaseEmbeddingStore()._client.table("profiles").update({
+        "display_name": display_name,
+    }).eq("id", user_id).execute()
+    return jsonify({"status": "success", "display_name": display_name})
+
+
+@app.route("/api/me/avatar", methods=["POST", "DELETE"])
+@require_auth
+@limiter.limit("20 per hour")
+def update_avatar():
+    """POST { image: <data URL or base64 JPEG/PNG> } to set; DELETE to clear."""
+    try:
+        user_id = _get_user_id()
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 401
+    from face_engine import SupabaseEmbeddingStore
+    tbl = SupabaseEmbeddingStore()._client.table("profiles")
+
+    if request.method == "DELETE":
+        tbl.update({"avatar_url": None}).eq("id", user_id).execute()
+        return jsonify({"status": "success", "avatar_url": None})
+
+    payload = request.get_json(silent=True) or {}
+    image   = (payload.get("image") or "").strip()
+    if not image:
+        return jsonify({"status": "error", "message": "Image required."}), 400
+
+    if not image.startswith("data:image/"):
+        # Bare base64 — wrap as data URL with a safe default mime
+        image = f"data:image/jpeg;base64,{image}"
+
+    # Size guard so we don't blow up the row storage (Supabase text limit
+    # is generous but we don't want megapixel uploads by accident).
+    try:
+        b64 = image.split(",", 1)[1]
+        decoded_len = (len(b64) * 3) // 4
+    except Exception:
+        return jsonify({"status": "error", "message": "Invalid image data."}), 400
+    if decoded_len > _MAX_AVATAR_BYTES:
+        return jsonify({
+            "status":  "error",
+            "message": f"Image too large ({decoded_len // 1024} KB). Max 512 KB.",
+        }), 400
+
+    tbl.update({"avatar_url": image}).eq("id", user_id).execute()
+    return jsonify({"status": "success", "avatar_url": image})
 
 
 # ---------------------------------------------------------------------------

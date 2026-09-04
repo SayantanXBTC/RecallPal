@@ -15,8 +15,10 @@ import { useRouter } from 'next/navigation';
 // ---------------------------------------------------------------------------
 
 export interface AuthUser {
-  id:    string;
-  email: string;
+  id:            string;
+  email:         string;
+  display_name?: string | null;
+  avatar_url?:   string | null;
 }
 
 interface AuthContextValue {
@@ -27,8 +29,11 @@ interface AuthContextValue {
   signup:          (email: string, password: string) => Promise<void>;
   logout:          () => void;
   refreshToken:    () => Promise<boolean>;
-  /** Load a session that was obtained out-of-band (e.g. OAuth callback). */
   hydrateSession:  (accessToken: string, refreshToken: string, user: AuthUser, expiresIn: number) => void;
+  refreshProfile:  () => Promise<void>;
+  updateProfile:   (displayName: string) => Promise<void>;
+  updateAvatar:    (dataUrl: string) => Promise<void>;
+  removeAvatar:    () => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -204,8 +209,97 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   }, []);
 
+  const authFetch = useCallback(async (input: RequestInfo, init: RequestInit = {}) => {
+    const headers = new Headers(init.headers || {});
+    const t = token || localStorage.getItem(TOKEN_KEY);
+    if (t) headers.set('Authorization', `Bearer ${t}`);
+    if (!headers.has('Content-Type') && init.body) headers.set('Content-Type', 'application/json');
+    return fetch(input, { ...init, headers });
+  }, [token]);
+
+  const refreshProfile = useCallback(async () => {
+    try {
+      const res = await authFetch('/api/auth/me');
+      if (!res.ok) return;
+      const data = await res.json();
+      const u = data?.user;
+      if (!u?.id) return;
+      const merged: AuthUser = {
+        id:            u.id,
+        email:         u.email,
+        display_name:  u.display_name ?? null,
+        avatar_url:    u.avatar_url   ?? null,
+      };
+      setUser(merged);
+      const stored = loadStored();
+      if (stored.token && stored.refreshToken && stored.expiry) {
+        localStorage.setItem(USER_KEY, JSON.stringify(merged));
+      }
+    } catch {
+      // silent — profile enrichment is best-effort
+    }
+  }, [authFetch]);
+
+  const updateProfile = useCallback(async (displayName: string) => {
+    const res  = await authFetch('/api/me/profile', {
+      method: 'POST',
+      body:   JSON.stringify({ display_name: displayName }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.status !== 'success') throw new Error(data.message || 'Failed to update profile.');
+    setUser((prev) => (prev ? { ...prev, display_name: displayName } : prev));
+    const raw = localStorage.getItem(USER_KEY);
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        localStorage.setItem(USER_KEY, JSON.stringify({ ...parsed, display_name: displayName }));
+      } catch { /* ignore */ }
+    }
+  }, [authFetch]);
+
+  const updateAvatar = useCallback(async (dataUrl: string) => {
+    const res  = await authFetch('/api/me/avatar', {
+      method: 'POST',
+      body:   JSON.stringify({ image: dataUrl }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.status !== 'success') throw new Error(data.message || 'Failed to update avatar.');
+    setUser((prev) => (prev ? { ...prev, avatar_url: data.avatar_url } : prev));
+    const raw = localStorage.getItem(USER_KEY);
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        localStorage.setItem(USER_KEY, JSON.stringify({ ...parsed, avatar_url: data.avatar_url }));
+      } catch { /* ignore */ }
+    }
+  }, [authFetch]);
+
+  const removeAvatar = useCallback(async () => {
+    const res  = await authFetch('/api/me/avatar', { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok || data.status !== 'success') throw new Error(data.message || 'Failed to remove avatar.');
+    setUser((prev) => (prev ? { ...prev, avatar_url: null } : prev));
+    const raw = localStorage.getItem(USER_KEY);
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        localStorage.setItem(USER_KEY, JSON.stringify({ ...parsed, avatar_url: null }));
+      } catch { /* ignore */ }
+    }
+  }, [authFetch]);
+
+  // Kick a profile refresh once we're authenticated so avatar/display_name
+  // populate on first load and after OAuth callback.
+  useEffect(() => {
+    if (token && user) void refreshProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, signup, logout, refreshToken, hydrateSession }}>
+    <AuthContext.Provider value={{
+      user, token, loading, login, signup, logout, refreshToken, hydrateSession,
+      refreshProfile, updateProfile, updateAvatar, removeAvatar,
+    }}>
       {children}
     </AuthContext.Provider>
   );

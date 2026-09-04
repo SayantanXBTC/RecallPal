@@ -6,6 +6,7 @@ import { Menu, X, Moon, Sun } from 'lucide-react';
 import Link from 'next/link';
 import { useTheme } from '@/lib/theme-context';
 import { useAuth } from '@/lib/auth-context';
+import Avatar from '@/components/Avatar';
 
 const NAV_LINKS = [
   { label: 'About',       href: '#about' },
@@ -103,13 +104,19 @@ export default function Navbar() {
           </button>
 
           {authed ? (
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.97 }}>
-              <Link href="/dashboard"
-                className="font-dm-sans text-sm font-semibold text-white rounded-full px-5 py-2.5 shadow-gold transition-all duration-200"
-                style={{ background: 'linear-gradient(135deg,#C9943A,#F0C97A)' }}>
-                Open Dashboard
+            <>
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.97 }}>
+                <Link href="/dashboard"
+                  className="font-dm-sans text-sm font-semibold text-white rounded-full px-5 py-2.5 shadow-gold transition-all duration-200"
+                  style={{ background: 'linear-gradient(135deg,#C9943A,#F0C97A)' }}>
+                  Open Dashboard
+                </Link>
+              </motion.div>
+              <Link href="/settings" title={user?.display_name || user?.email || 'Profile'}
+                className="shrink-0 hover:scale-105 transition-transform">
+                <Avatar src={user?.avatar_url} name={user?.display_name || user?.email} size={34} ring />
               </Link>
-            </motion.div>
+            </>
           ) : (
             <>
               <Link href="/login"
