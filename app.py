@@ -125,6 +125,80 @@ def _get_auth_client():
     return _auth_client
 
 
+_JWKS_CACHE: dict[str, tuple[float, list[dict]]] = {}
+_JWKS_TTL_S = 600.0
+
+
+def _fetch_supabase_jwks() -> list[dict]:
+    """Fetch and cache Supabase JWKS for asymmetric JWT verification.
+
+    Supabase projects that migrated to signing keys expose the public JWKS
+    at {SUPABASE_URL}/auth/v1/.well-known/jwks.json. Cached in-process for
+    _JWKS_TTL_S seconds to avoid a network round-trip per request.
+    """
+    import time as _time
+    import requests as _requests
+    base = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
+    if not base:
+        return []
+    now = _time.time()
+    cached = _JWKS_CACHE.get(base)
+    if cached and (now - cached[0]) < _JWKS_TTL_S:
+        return cached[1]
+    try:
+        r = _requests.get(f"{base}/auth/v1/.well-known/jwks.json", timeout=3.0)
+        r.raise_for_status()
+        keys = (r.json() or {}).get("keys") or []
+        _JWKS_CACHE[base] = (now, keys)
+        return keys
+    except Exception as exc:
+        logger.warning("JWKS fetch failed for %s: %s", base, exc)
+        return cached[1] if cached else []
+
+
+def _verify_supabase_jwt(token: str, hs256_secret: str) -> dict:
+    """Verify a Supabase JWT.
+
+    Supports two signing modes transparently:
+      - Legacy HS256 with the project's JWT secret.
+      - Asymmetric ES256 / RS256 with rotating keys published via JWKS.
+
+    Chooses the code path from the token's own alg header, then verifies
+    against the appropriate key material.
+    """
+    header = jose_jwt.get_unverified_header(token)
+    alg    = (header.get("alg") or "").strip()
+    kid    = (header.get("kid") or "").strip()
+    common_opts = {
+        "verify_signature": True,
+        "verify_aud":       True,
+        "verify_exp":       True,
+        "verify_iat":       True,
+        "require":          ["exp", "sub", "aud"],
+    }
+    if alg == "HS256":
+        return jose_jwt.decode(
+            token, hs256_secret,
+            algorithms=["HS256"], audience="authenticated", options=common_opts,
+        )
+    if alg in ("ES256", "RS256"):
+        keys = _fetch_supabase_jwks()
+        matches = [k for k in keys if (k.get("kid") == kid)] if kid else keys
+        if not matches:
+            raise JWTError(f"no JWKS key matched kid={kid!r}")
+        last_exc: Exception | None = None
+        for jwk in matches:
+            try:
+                return jose_jwt.decode(
+                    token, jwk,
+                    algorithms=[alg], audience="authenticated", options=common_opts,
+                )
+            except JWTError as exc:
+                last_exc = exc
+        raise JWTError(str(last_exc) if last_exc else "asymmetric verification failed")
+    raise JWTError(f"unsupported alg: {alg!r}")
+
+
 def require_auth(f):
     """
     Route decorator that enforces Bearer JWT authentication.
@@ -175,19 +249,7 @@ def require_auth(f):
             return jsonify({"status": "error", "message": "Empty bearer token."}), 401
 
         try:
-            payload = jose_jwt.decode(
-                token,
-                jwt_secret,
-                algorithms=["HS256"],
-                audience="authenticated",
-                options={
-                    "verify_signature": True,
-                    "verify_aud":       True,
-                    "verify_exp":       True,
-                    "verify_iat":       True,
-                    "require":          ["exp", "sub", "aud"],
-                },
-            )
+            payload = _verify_supabase_jwt(token, jwt_secret)
         except JWTError as exc:
             logger.warning("JWT verification failed: %s", exc)
             return jsonify({
