@@ -106,12 +106,22 @@ export default function ConversationListener({ active }: Props) {
         }
       };
 
+      // Debounce restarts so a burst of onend+onerror after stop() doesn't
+      // create a runaway loop. Only one restart may schedule at a time.
+      let restartScheduled = false;
+      const scheduleRestart = (delayMs: number) => {
+        if (restartScheduled || !shouldRun.current) return;
+        restartScheduled = true;
+        setTimeout(() => {
+          restartScheduled = false;
+          if (shouldRun.current) { try { start(); } catch { /* ignore */ } }
+        }, delayMs);
+      };
+
       rec.onend = () => {
-        // Chrome auto-stops after ~30s of silence; restart while we're
-        // supposed to be listening.
-        if (shouldRun.current) {
-          try { start(); } catch { /* ignore */ }
-        }
+        // Chrome auto-stops after ~30s of silence; also fires after an
+        // error or manual stop(). scheduleRestart dedupes with onerror.
+        if (shouldRun.current) scheduleRestart(800);
       };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       rec.onerror = (e: any) => {
@@ -121,11 +131,14 @@ export default function ConversationListener({ active }: Props) {
           shouldRun.current = false;
           return;
         }
-        // 'no-speech', 'aborted', 'network' — restart quietly.
-        console.log('[listener] transient error, restarting:', kind);
-        if (shouldRun.current) {
-          setTimeout(() => { try { start(); } catch { /* ignore */ } }, 600);
+        if (kind === 'aborted') {
+          // Fired when we (or an unmount) called stop(). Don't restart —
+          // onend runs right after and handles it, and we don't want to
+          // fight a genuine shutdown.
+          return;
         }
+        // 'no-speech', 'network', etc. — quiet restart via onend path.
+        console.log('[listener] transient error:', kind);
       };
 
       recRef.current = rec;
