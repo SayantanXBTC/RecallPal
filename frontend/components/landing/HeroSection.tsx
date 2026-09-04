@@ -5,13 +5,16 @@ import { motion, useInView } from 'framer-motion';
 import Link from 'next/link';
 import { fadeUp, staggerContainer } from '@/lib/variants';
 import { useTheme } from '@/lib/theme-context';
+import { useAuth } from '@/lib/auth-context';
 import ScrollIndicator from './ScrollIndicator';
 
 export default function HeroSection() {
   const ref    = useRef(null);
   const inView = useInView(ref, { once: true, amount: 0.2 });
   const { theme } = useTheme();
+  const { user, loading } = useAuth();
   const dark = theme === 'dark';
+  const authed = !loading && !!user;
 
   return (
     <section className="relative min-h-screen flex flex-col items-center justify-center text-center px-6 pt-24 pb-0 overflow-hidden">
@@ -77,32 +80,42 @@ export default function HeroSection() {
 
         {/* CTA buttons */}
         <motion.div variants={fadeUp} custom={2} className="flex flex-wrap gap-4 justify-center mt-10">
-
-          {/* Primary — Register */}
-          <motion.div
-            whileHover={{ scale: 1.05, boxShadow: '0 8px 30px rgba(201,148,58,0.45)' }}
-            whileTap={{ scale: 0.97 }}>
-            <Link href="/register"
-              className="font-dm-sans font-semibold text-white rounded-full px-8 py-4 text-lg shadow-gold inline-block transition-all duration-200"
-              style={{ background: 'linear-gradient(135deg,#C9943A,#F0C97A)' }}>
-              Register Now
-            </Link>
-          </motion.div>
-
-          {/* Secondary — Already registered */}
-          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-            <Link href="/login"
-              className="font-dm-sans font-medium rounded-full px-8 py-4 text-lg shadow-warm-sm inline-block transition-all duration-200"
-              style={{
-                background: dark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.70)',
-                backdropFilter: 'blur(8px)',
-                border: `1px solid ${dark ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.80)'}`,
-                color: dark ? '#C4B09A' : '#6B5C52',
-              }}>
-              Already registered?{' '}
-              <span style={{ color: '#C9943A', fontWeight: 600 }}>Log in</span>
-            </Link>
-          </motion.div>
+          {authed ? (
+            <motion.div
+              whileHover={{ scale: 1.05, boxShadow: '0 8px 30px rgba(201,148,58,0.45)' }}
+              whileTap={{ scale: 0.97 }}>
+              <Link href="/dashboard"
+                className="font-dm-sans font-semibold text-white rounded-full px-8 py-4 text-lg shadow-gold inline-block transition-all duration-200"
+                style={{ background: 'linear-gradient(135deg,#C9943A,#F0C97A)' }}>
+                Open Dashboard
+              </Link>
+            </motion.div>
+          ) : (
+            <>
+              <motion.div
+                whileHover={{ scale: 1.05, boxShadow: '0 8px 30px rgba(201,148,58,0.45)' }}
+                whileTap={{ scale: 0.97 }}>
+                <Link href="/register"
+                  className="font-dm-sans font-semibold text-white rounded-full px-8 py-4 text-lg shadow-gold inline-block transition-all duration-200"
+                  style={{ background: 'linear-gradient(135deg,#C9943A,#F0C97A)' }}>
+                  Register Now
+                </Link>
+              </motion.div>
+              <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+                <Link href="/login"
+                  className="font-dm-sans font-medium rounded-full px-8 py-4 text-lg shadow-warm-sm inline-block transition-all duration-200"
+                  style={{
+                    background: dark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.70)',
+                    backdropFilter: 'blur(8px)',
+                    border: `1px solid ${dark ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.80)'}`,
+                    color: dark ? '#C4B09A' : '#6B5C52',
+                  }}>
+                  Already registered?{' '}
+                  <span style={{ color: '#C9943A', fontWeight: 600 }}>Log in</span>
+                </Link>
+              </motion.div>
+            </>
+          )}
         </motion.div>
 
       </motion.div>

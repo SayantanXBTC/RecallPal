@@ -228,16 +228,21 @@ export default function DashboardPage() {
             </svg>
           </Link>
 
-          {/* Sign out */}
+          {/* Sign out — bordered pill, sits at header height */}
           <button
             onClick={handleSignOut}
-            className="px-3 py-1.5 rounded-xl text-xs font-medium font-dm-sans transition-all"
+            className="inline-flex items-center gap-1.5 h-9 px-4 rounded-full text-xs font-semibold font-dm-sans transition-all hover:shadow-warm-sm"
             style={{
-              background: dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
-              border:     `1px solid ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
-              color:      textSoft,
+              background: dark ? 'rgba(201,148,58,0.08)' : 'rgba(255,255,255,0.75)',
+              border:     `1px solid ${dark ? 'rgba(201,148,58,0.35)' : 'rgba(201,148,58,0.30)'}`,
+              color:      dark ? '#F0C97A' : '#C9943A',
             }}
           >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
             Sign out
           </button>
         </div>

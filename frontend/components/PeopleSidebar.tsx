@@ -161,7 +161,7 @@ function PersonCard({
 
   return (
     <div
-      className="rounded-2xl overflow-hidden transition-all duration-200"
+      className="group rounded-2xl overflow-hidden transition-all duration-200 hover:shadow-warm-md"
       style={{
         background:   dark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.65)',
         border:       `1px solid ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.80)'}`,
@@ -196,6 +196,8 @@ function PersonCard({
           )}
         </div>
 
+        {/* Action cluster — collapses to icons on hover / touch */}
+        <div className="flex items-center gap-1.5 shrink-0 opacity-60 group-hover:opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-200">
         {/* Edit toggle */}
         <button
           onClick={editing ? () => setEditing(false) : openEdit}
@@ -256,6 +258,7 @@ function PersonCard({
               d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
         </button>
+        </div>
       </div>
 
       {/* Delete confirmation panel */}

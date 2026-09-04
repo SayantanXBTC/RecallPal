@@ -137,8 +137,39 @@ export default function AboutSection() {
             </motion.p>
           </motion.div>
 
+          {/* Who it helps — three principled tiles */}
+          <motion.div variants={staggerContainer} initial="hidden" animate={factIn ? 'visible' : 'hidden'} className="grid md:grid-cols-3 gap-6 mb-16">
+            {[
+              {
+                icon: <Users size={22} />,
+                title: 'For families',
+                body:  'A quiet second pair of eyes at the kitchen table — softening moments of blank recognition into shared smiles.',
+              },
+              {
+                icon: <Heart size={22} />,
+                title: 'For patients',
+                body:  'Independence held a little longer. Faces stay familiar; conversation stays possible; dignity stays intact.',
+              },
+              {
+                icon: <Brain size={22} />,
+                title: 'For caregivers',
+                body:  'Fewer painful reintroductions. More time being present, less time bridging the gap alone.',
+              },
+            ].map((tile) => (
+              <motion.div key={tile.title} variants={scaleIn}
+                className="rounded-3xl p-7 shadow-warm-md border"
+                style={{ background: solidCard, backdropFilter: 'blur(14px)', borderColor: border }}>
+                <div className="w-11 h-11 rounded-2xl flex items-center justify-center mb-4"
+                  style={{ background: dark ? iconBgDark : 'rgba(253,243,224,0.85)', color: '#C9943A' }}>
+                  {tile.icon}
+                </div>
+                <h3 className="font-serif text-lg mb-2" style={{ color: hColor }}>{tile.title}</h3>
+                <p className="font-dm-sans text-sm leading-relaxed" style={{ color: bColor }}>{tile.body}</p>
+              </motion.div>
+            ))}
+          </motion.div>
+
           {/* Causes & Effects */}
-          <div className="mb-4" />
 
           <motion.div variants={staggerContainer} initial="hidden" animate={factIn ? 'visible' : 'hidden'} className="grid md:grid-cols-2 gap-8">
             {/* Causes */}

@@ -370,12 +370,13 @@ export default function CameraPanel({ onRecognition, currentResult, onAddRequest
           </div>
         )}
 
-        {/* Scanning badge */}
+        {/* Subtle scanning pulse (no text — quieter presence) */}
         {isActive && isScanning && (
-          <div className="absolute top-3 right-3 rounded-full px-2.5 py-1 flex items-center gap-1.5"
-               style={{ background: 'rgba(0,0,0,0.50)', backdropFilter: 'blur(8px)' }}>
-            <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#C9943A' }} />
-            <span className="text-[10px] font-medium tracking-wider font-dm-sans" style={{ color: '#F0C97A' }}>Scanning</span>
+          <div className="absolute top-3 right-3 flex items-center">
+            <span className="relative w-2 h-2">
+              <span className="absolute inset-0 rounded-full animate-ping opacity-70" style={{ background: '#C9943A' }} />
+              <span className="relative block w-2 h-2 rounded-full" style={{ background: '#F0C97A' }} />
+            </span>
           </div>
         )}
 
@@ -389,18 +390,21 @@ export default function CameraPanel({ onRecognition, currentResult, onAddRequest
             const { x, y, w, h } = face.bbox;
             const fw = face.frame_width;
             const fh = face.frame_height;
-            const centerXPct = ((x + w / 2) / fw) * 100;
+            const centerXPct   = ((x + w / 2) / fw) * 100;
             const rightEdgePct = ((x + w) / fw) * 100;
             const leftEdgePct  = (x / fw) * 100;
-            const topPct = Math.max(2, Math.min(72, (y / fh) * 100));
+            // Anchor near the top of the head, not the top of the frame,
+            // so the card sits at eye-level next to the face.
+            const topPct = Math.max(2, Math.min(70, (y / fh) * 100));
+            // Larger horizontal offset (~w * 0.12 of frame) so the card
+            // never overlaps the face itself.
+            const gapPct = Math.min(6, ((w * 0.20) / fw) * 100);
 
-            if (centerXPct < 55) {
-              // face in left half — card goes to the right of face
-              left = `${Math.min(rightEdgePct + 1.5, 65)}%`;
+            if (centerXPct < 50) {
+              left = `${Math.min(rightEdgePct + gapPct, 70)}%`;
               transform = 'none';
             } else {
-              // face in right half — card goes to the left of face
-              left = `${Math.max(leftEdgePct - 1.5, 0)}%`;
+              left = `${Math.max(leftEdgePct - gapPct, 0)}%`;
               transform = 'translateX(-100%)';
             }
             top = `${topPct}%`;
