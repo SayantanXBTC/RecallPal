@@ -47,6 +47,7 @@ Real-time face recognition system that helps dementia patients recognise people 
 1. Go to [supabase.com](https://supabase.com) and create a new project.
 2. Open the SQL editor and run `supabase_schema.sql` from the project root to create all tables (`profiles`, `people`, `face_embeddings`, `recognition_events`).
 3. Then run `migrations/001_pgvector_hnsw.sql` to add the denormalised `user_id` column, tuned HNSW index, and the `match_face_embeddings` RPC used for server-side k-NN.
+4. Then run `migrations/002_consent_audit.sql` to add the `consents` + `audit_log` tables plus the `delete_user_data` right-to-erasure RPC.
 
 > **Re-enrolment note:** the recognition pipeline now uses landmark-aligned faces via insightface RetinaFace (previously Haar-cropped). Embedding dimensionality is unchanged (512-d ArcFace r50) so old rows keep working, but for best accuracy re-enrol existing people once after upgrading. Use the "Add more photos" flow from the People sidebar to append fresh insightface-aligned embeddings.
 4. In the Supabase dashboard go to **Settings → API** and copy:

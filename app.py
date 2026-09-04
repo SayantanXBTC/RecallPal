@@ -706,6 +706,20 @@ def add_person():
             "Adding person '%s' (%s) with %d image(s).", name, relation, len(images)
         )
 
+        # Consent gate (GDPR Art. 9). Enrolling biometric data without an
+        # active opt-in is a compliance breach. The client must call
+        # POST /api/consent before /api/add-person for the same subject.
+        from consent import has_active_consent, audit as _audit
+        if not has_active_consent(user_id, name):
+            return jsonify({
+                "status":  "error",
+                "code":    "consent_required",
+                "message": (
+                    f"No active biometric consent found for '{name}'. "
+                    "Call POST /api/consent with the granter's name and relation first."
+                ),
+            }), 403
+
         # Optional async path: when the caller sets ?async=true or the
         # X-Async: 1 header AND Redis is configured, dispatch to the RQ
         # worker on the GPU pod and return 202 with a job_id.
@@ -722,6 +736,27 @@ def add_person():
                 "job_id": job["job_id"],
                 "message": f"Enrolment for {name} accepted. Poll /api/enrol-status/{job['job_id']}.",
             }), 202
+
+        # Liveness / quality gate — blur + duplicate frame detection before
+        # burning GPU on embedding extraction. Pose variance check runs later
+        # against insightface pose estimates if we have them.
+        try:
+            from liveness import enrol_quality_check, is_sharp
+            decoded_frames = []
+            for img_b64 in images:
+                try:
+                    decoded_frames.append(engine._decode_frame(img_b64))
+                except Exception:
+                    continue
+            # Cheap pre-check: reject if no frame is sharp at all.
+            if decoded_frames and not any(is_sharp(f) for f in decoded_frames):
+                return jsonify({
+                    "status":  "error",
+                    "code":    "liveness_failed",
+                    "message": "All frames are blurred. Hold the camera steady with good lighting and retake.",
+                }), 400
+        except Exception as _exc:
+            logger.warning("Pre-enrol liveness check skipped: %s", _exc)
 
         # Generate embeddings and save to Supabase
         engine_result = engine.add_person(name, images)
@@ -749,6 +784,10 @@ def add_person():
             "likes": likes,
         }
         get_memory_manager(user_id).store_person(name_key, mem_payload)
+
+        _audit(user_id, "enrol_person",
+               target_type="person", target_id=name_key,
+               metadata={"embeddings_count": engine_result["embeddings_count"]})
 
         return jsonify(
             {
@@ -942,6 +981,16 @@ def add_photos():
                 "message": f"'{name}' is not enrolled. Use Add Person to enroll them first.",
             }), 404
 
+        # Consent gate for appending new biometric data.
+        from consent import has_active_consent
+        if not has_active_consent(user_id, name_key):
+            return jsonify({
+                "status":  "error",
+                "code":    "consent_required",
+                "message": f"No active biometric consent for '{name}'. "
+                           "Refresh consent via POST /api/consent first.",
+            }), 403
+
         from face_engine import _augment_frame
 
         raw_embeddings = []
@@ -1034,6 +1083,9 @@ def delete_person():
         # Delete from Supabase — people row cascades to face_embeddings
         get_memory_manager(user_id).delete_person(name_key)
 
+        from consent import audit as _audit
+        _audit(user_id, "delete_person", target_type="person", target_id=name_key)
+
         logger.info("Deleted person '%s' for user %s.", name_key, user_id)
         return jsonify({"status": "success", "message": f"{name} deleted successfully."})
 
@@ -1041,6 +1093,94 @@ def delete_person():
         tb = traceback.format_exc()
         logger.error("Error in POST /api/delete-person:\n%s", tb)
         return jsonify({"status": "error", "message": "Delete failed", "detail": tb}), 500
+
+
+# ---------------------------------------------------------------------------
+# Consent + audit + right-to-erasure
+# ---------------------------------------------------------------------------
+
+@app.route("/api/consent", methods=["GET", "POST"])
+@require_auth
+def consent_endpoint():
+    """List (GET) or grant (POST) biometric consent for a subject.
+
+    POST body: { subject_name, granter_name, granter_relation? }.
+    Returns { consent_id } on success. Frontend should call this
+    before /api/add-person for the same subject.
+    """
+    from consent import list_consents, grant_consent, CURRENT_CONSENT_VERSION
+    try:
+        user_id = _get_user_id()
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 401
+
+    if request.method == "GET":
+        return jsonify({
+            "consent_text_version": CURRENT_CONSENT_VERSION,
+            "consents":             list_consents(user_id),
+        })
+
+    payload = request.get_json(silent=True) or {}
+    subject  = (payload.get("subject_name")     or "").strip()
+    granter  = (payload.get("granter_name")     or "").strip()
+    relation = (payload.get("granter_relation") or "").strip()
+    if not subject or not granter:
+        return jsonify({
+            "status":  "error",
+            "message": "subject_name and granter_name are required.",
+        }), 400
+    cid = grant_consent(user_id, subject_name=subject,
+                        granter_name=granter, granter_relation=relation)
+    if not cid:
+        return jsonify({"status": "error", "message": "Failed to record consent."}), 500
+    return jsonify({
+        "status":     "success",
+        "consent_id": cid,
+        "version":    CURRENT_CONSENT_VERSION,
+    })
+
+
+@app.route("/api/consent/<consent_id>", methods=["DELETE"])
+@require_auth
+def consent_revoke(consent_id: str):
+    from consent import revoke_consent
+    try:
+        user_id = _get_user_id()
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 401
+    ok = revoke_consent(user_id, consent_id)
+    if not ok:
+        return jsonify({"status": "error", "message": "Revoke failed."}), 400
+    return jsonify({"status": "success"})
+
+
+@app.route("/api/audit", methods=["GET"])
+@require_auth
+def audit_log_endpoint():
+    from consent import list_audit
+    try:
+        user_id = _get_user_id()
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 401
+    limit = int(request.args.get("limit", "200"))
+    return jsonify({"events": list_audit(user_id, limit=limit)})
+
+
+@app.route("/api/me", methods=["DELETE"])
+@require_auth
+def erase_me():
+    """GDPR right-to-erasure. Wipes all user rows via SECURITY DEFINER RPC
+    and revokes JWT session on next request (cascades profile → people →
+    embeddings → events → consents)."""
+    from consent import erase_user, audit as _audit
+    try:
+        user_id = _get_user_id()
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 401
+    _audit(user_id, "erase_user_requested", target_type="user", target_id=user_id)
+    if not erase_user(user_id):
+        return jsonify({"status": "error", "message": "Erasure failed."}), 500
+    return jsonify({"status": "success", "message": "Account and all associated biometric data deleted."})
 
 
 @app.route("/api/seed", methods=["POST"])
