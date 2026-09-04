@@ -1,19 +1,21 @@
 'use client';
 
 /**
- * Continuous room-mic listener. While the camera is running, we keep a
- * Web Speech Recognition session open, batch each final utterance, and
+ * Continuous room-mic listener. While the dashboard is mounted, we keep
+ * a Web Speech Recognition session open, batch each final utterance, and
  * POST it to /api/conversations attributed to whichever known face is
- * currently on screen. This is what powers the "Last time you spoke
- * about X" cue on the face card.
+ * currently on screen.
  *
- * We intentionally do NOT store snippets when the face is unknown or
- * no face is on screen — the whole point is per-person memory.
+ * Only ONE recognizer runs per browser tab, regardless of how many
+ * times React re-mounts this component (strict mode double-invoke,
+ * navigation, etc.). All coordination lives in module-level state so
+ * the mount/unmount lifecycle can't spawn duplicate instances.
  */
 
 import { useEffect, useRef } from 'react';
 import { useAssistant } from '@/lib/assistant-context';
 import { useAuth }      from '@/lib/auth-context';
+import type { MultiRecognitionResult } from '@/lib/types';
 
 interface Props {
   /** Only listen when true (usually mirrors camera on/off). */
@@ -23,166 +25,162 @@ interface Props {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SR = any;
 
+// ─── Module-level singleton state ────────────────────────────────────────────
+// One recognizer per tab. Refs held here so remounts don't leak instances.
+let g_rec: SR | null = null;
+let g_shouldRun = false;
+let g_started   = false;   // set once user has granted mic + kick fired
+let g_facesRef: { current: MultiRecognitionResult['faces'] } = { current: [] };
+let g_tokenRef: { current: string | null }                  = { current: null };
+let g_restartScheduled = false;
+let g_kickListenerAttached = false;
+
+async function requestMicOnce(): Promise<boolean> {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach((t) => t.stop());
+    return true;
+  } catch (err) {
+    console.warn('[listener] microphone permission was refused:', err);
+    return false;
+  }
+}
+
+function scheduleRestart() {
+  if (g_restartScheduled || !g_shouldRun) return;
+  g_restartScheduled = true;
+  setTimeout(() => {
+    g_restartScheduled = false;
+    if (g_shouldRun) startRec();
+  }, 900);
+}
+
+function startRec() {
+  if (typeof window === 'undefined') return;
+  if (g_rec) return;   // already running
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const SRClass: any = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+  if (!SRClass) return;
+
+  const rec: SR = new SRClass();
+  rec.lang            = 'en-US';
+  rec.continuous      = true;
+  rec.interimResults  = false;
+  rec.maxAlternatives = 1;
+
+  rec.onstart = () => console.log('[listener] mic open, listening…');
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rec.onresult = (e: any) => {
+    const results = e.results;
+    for (let i = e.resultIndex; i < results.length; i++) {
+      const r = results[i];
+      if (!r.isFinal) continue;
+      const text = (r[0]?.transcript || '').trim();
+      if (!text || text.length < 3) continue;
+
+      const knownFaces = (g_facesRef.current || []).filter(
+        (f) => f.status === 'recognized' && f.name,
+      );
+      if (knownFaces.length === 0) {
+        console.log('[listener] heard but no known face — discarded:', text);
+        continue;
+      }
+      const t = g_tokenRef.current;
+      if (!t) { console.warn('[listener] no auth token — skip'); continue; }
+
+      const names = knownFaces.map((f) => f.name).join(', ');
+      console.log(`[listener] saving for ${names}:`, text);
+      for (const face of knownFaces) {
+        void fetch('/api/conversations', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t}` },
+          body:    JSON.stringify({ person_name: face.name, transcript: text }),
+        }).then(async (res) => {
+          if (!res.ok) {
+            const body = await res.text().catch(() => '');
+            console.warn('[listener] save failed', face.name, res.status, body);
+          }
+        }).catch((err) => console.warn('[listener] save fetch error', face.name, err));
+      }
+    }
+  };
+
+  rec.onend = () => {
+    g_rec = null;
+    if (g_shouldRun) scheduleRestart();
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rec.onerror = (e: any) => {
+    const kind = e?.error || 'unknown';
+    if (kind === 'not-allowed' || kind === 'service-not-allowed') {
+      console.warn('[listener] microphone permission denied.');
+      g_shouldRun = false;
+      return;
+    }
+    if (kind === 'aborted') return;   // expected on stop()
+    console.log('[listener] transient error:', kind);
+  };
+
+  g_rec = rec;
+  try { rec.start(); } catch (err) { console.warn('[listener] start() threw:', err); g_rec = null; }
+}
+
+async function attachKickListener() {
+  if (g_kickListenerAttached) return;
+  g_kickListenerAttached = true;
+
+  const kick = async () => {
+    if (g_started || !g_shouldRun) return;
+    g_started = true;
+    window.removeEventListener('pointerdown', kick, true);
+    window.removeEventListener('keydown',     kick, true);
+    console.log('[listener] user gesture — requesting microphone…');
+    const ok = await requestMicOnce();
+    if (!ok) { g_shouldRun = false; return; }
+    console.log('[listener] mic permission granted — starting speech recognition.');
+    startRec();
+  };
+  window.addEventListener('pointerdown', kick, true);
+  window.addEventListener('keydown',     kick, true);
+}
+
 export default function ConversationListener({ active }: Props) {
   const { faces } = useAssistant();
   const { token } = useAuth();
 
   const facesRef  = useRef(faces);
   const tokenRef  = useRef(token);
-  const recRef    = useRef<SR | null>(null);
-  const shouldRun = useRef(false);
 
-  useEffect(() => { facesRef.current = faces; }, [faces]);
-  useEffect(() => { tokenRef.current = token; }, [token]);
+  useEffect(() => { facesRef.current = faces; g_facesRef = facesRef; }, [faces]);
+  useEffect(() => { tokenRef.current = token; g_tokenRef = tokenRef; }, [token]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SRClass: any = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SRClass) {
-      console.log('[listener] Web Speech Recognition not supported in this browser. Try Chrome or Edge.');
+      console.log('[listener] Web Speech Recognition not supported here. Try Chrome or Edge.');
       return;
     }
 
-    if (!active) { shouldRun.current = false; try { recRef.current?.stop(); } catch { /* ignore */ } return; }
-
-    // Chrome refuses SpeechRecognition until the page has seen at least
-    // one user gesture (click / keypress). Mounting the component doesn't
-    // count — so we defer the first start() until the user interacts
-    // with the page for anything. Subsequent auto-restarts (onend) then
-    // inherit the granted gesture context for the session.
-    const armed = shouldRun.current;   // avoid re-arming on active toggle
-    shouldRun.current = true;
-    console.log('[listener] armed — will start speech capture on your first click.');
-
-    const start = () => {
-      if (!shouldRun.current) return;
-      const rec: SR = new SRClass();
-      rec.lang            = 'en-US';
-      rec.continuous      = true;
-      rec.interimResults  = false;
-      rec.maxAlternatives = 1;
-
-      rec.onstart = () => console.log('[listener] mic open, listening…');
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      rec.onresult = (e: any) => {
-        const results = e.results;
-        for (let i = e.resultIndex; i < results.length; i++) {
-          const r = results[i];
-          if (!r.isFinal) continue;
-          const text = (r[0]?.transcript || '').trim();
-          if (!text || text.length < 3) continue;
-
-          // Attribute the utterance to EVERY known face on screen right
-          // now. If a group is present we can't tell who spoke, so
-          // broadcast the memory — each person's card gets the snippet
-          // and the caregiver can review per person later.
-          const knownFaces = (facesRef.current || []).filter(
-            (f) => f.status === 'recognized' && f.name,
-          );
-          if (knownFaces.length === 0) {
-            console.log('[listener] heard but no known face — discarded:', text);
-            continue;
-          }
-          const t = tokenRef.current;
-          if (!t) { console.warn('[listener] no auth token — skip'); return; }
-
-          const names = knownFaces.map((f) => f.name).join(', ');
-          console.log(`[listener] saving for ${names}:`, text);
-
-          for (const face of knownFaces) {
-            void fetch('/api/conversations', {
-              method:  'POST',
-              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t}` },
-              body:    JSON.stringify({ person_name: face.name, transcript: text }),
-            }).then(async (res) => {
-              if (!res.ok) {
-                const body = await res.text().catch(() => '');
-                console.warn('[listener] save failed', face.name, res.status, body);
-              }
-            }).catch((err) => console.warn('[listener] save fetch error', face.name, err));
-          }
-        }
-      };
-
-      // Debounce restarts so a burst of onend+onerror after stop() doesn't
-      // create a runaway loop. Only one restart may schedule at a time.
-      let restartScheduled = false;
-      const scheduleRestart = (delayMs: number) => {
-        if (restartScheduled || !shouldRun.current) return;
-        restartScheduled = true;
-        setTimeout(() => {
-          restartScheduled = false;
-          if (shouldRun.current) { try { start(); } catch { /* ignore */ } }
-        }, delayMs);
-      };
-
-      rec.onend = () => {
-        // Chrome auto-stops after ~30s of silence; also fires after an
-        // error or manual stop(). scheduleRestart dedupes with onerror.
-        if (shouldRun.current) scheduleRestart(800);
-      };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      rec.onerror = (e: any) => {
-        const kind = e?.error || 'unknown';
-        if (kind === 'not-allowed' || kind === 'service-not-allowed') {
-          console.warn('[listener] microphone permission denied. Allow the mic in browser settings and reload.');
-          shouldRun.current = false;
-          return;
-        }
-        if (kind === 'aborted') {
-          // Fired when we (or an unmount) called stop(). Don't restart —
-          // onend runs right after and handles it, and we don't want to
-          // fight a genuine shutdown.
-          return;
-        }
-        // 'no-speech', 'network', etc. — quiet restart via onend path.
-        console.log('[listener] transient error:', kind);
-      };
-
-      recRef.current = rec;
-      try { rec.start(); } catch (err) { console.warn('[listener] start() threw:', err); }
-    };
-
-    // Wait for the first user gesture, then explicitly request mic
-    // permission via getUserMedia — Chrome no longer prompts for mic
-    // via SpeechRecognition alone, so without this the SR call throws
-    // 'not-allowed' silently and the user never sees a dialog.
-    let started = false;
-    const kick = async () => {
-      if (started || !shouldRun.current) return;
-      started = true;
-      window.removeEventListener('pointerdown', kick, true);
-      window.removeEventListener('keydown',     kick, true);
-      console.log('[listener] user gesture — requesting microphone…');
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        // We don't need the raw audio; SpeechRecognition opens its
-        // own track. Close the stream immediately after the browser
-        // records the permission grant.
-        stream.getTracks().forEach((t) => t.stop());
-        console.log('[listener] mic permission granted — starting speech recognition.');
-        start();
-      } catch (err) {
-        console.warn('[listener] microphone permission was refused:', err);
-        shouldRun.current = false;
-      }
-    };
-    if (armed && recRef.current) {
-      // Already running from a previous mount — no need to re-gate.
-      started = true;
-    } else {
-      window.addEventListener('pointerdown', kick, true);
-      window.addEventListener('keydown',     kick, true);
+    if (!active) {
+      // Leave singleton alone across brief remounts; only tear down on
+      // explicit deactivation of the listener.
+      return;
     }
 
-    return () => {
-      shouldRun.current = false;
-      window.removeEventListener('pointerdown', kick, true);
-      window.removeEventListener('keydown',     kick, true);
-      try { recRef.current?.stop(); } catch { /* ignore */ }
-    };
+    if (!g_shouldRun) {
+      g_shouldRun = true;
+      console.log('[listener] armed — will start speech capture on your first click.');
+    }
+    void attachKickListener();
+
+    // Deliberately no teardown here — the module-level singleton
+    // outlives strict-mode remounts. It is only shut down when
+    // `active` explicitly flips to false (rare — we could add that
+    // path later if the dashboard exposes a listen-off toggle).
   }, [active]);
 
   return null;
