@@ -46,8 +46,14 @@ export default function ConversationListener({ active }: Props) {
 
     if (!active) { shouldRun.current = false; try { recRef.current?.stop(); } catch { /* ignore */ } return; }
 
+    // Chrome refuses SpeechRecognition until the page has seen at least
+    // one user gesture (click / keypress). Mounting the component doesn't
+    // count — so we defer the first start() until the user interacts
+    // with the page for anything. Subsequent auto-restarts (onend) then
+    // inherit the granted gesture context for the session.
+    const armed = shouldRun.current;   // avoid re-arming on active toggle
     shouldRun.current = true;
-    console.log('[listener] starting speech capture. Grant microphone permission if prompted.');
+    console.log('[listener] armed — will start speech capture on your first click.');
 
     const start = () => {
       if (!shouldRun.current) return;
@@ -126,9 +132,29 @@ export default function ConversationListener({ active }: Props) {
       try { rec.start(); } catch (err) { console.warn('[listener] start() threw:', err); }
     };
 
-    start();
+    // Wait for the first user gesture before start(). Chrome / Edge
+    // require this before SpeechRecognition will initialise the mic.
+    let started = false;
+    const kick = () => {
+      if (started || !shouldRun.current) return;
+      started = true;
+      console.log('[listener] user gesture detected — starting mic.');
+      window.removeEventListener('pointerdown', kick, true);
+      window.removeEventListener('keydown',     kick, true);
+      start();
+    };
+    if (armed && recRef.current) {
+      // Already running from a previous mount — no need to re-gate.
+      started = true;
+    } else {
+      window.addEventListener('pointerdown', kick, true);
+      window.addEventListener('keydown',     kick, true);
+    }
+
     return () => {
       shouldRun.current = false;
+      window.removeEventListener('pointerdown', kick, true);
+      window.removeEventListener('keydown',     kick, true);
       try { recRef.current?.stop(); } catch { /* ignore */ }
     };
   }, [active]);
