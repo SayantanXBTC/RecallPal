@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { useTheme } from '@/lib/theme-context';
@@ -9,10 +9,15 @@ import Avatar from '@/components/Avatar';
 import { Bell, User, Palette, ShieldCheck, LogOut, Trash2, Upload, X } from 'lucide-react';
 
 export default function SettingsPage() {
-  const router = useRouter();
+  const router       = useRouter();
+  const searchParams = useSearchParams();
   const { user, token, logout, updateProfile, updateAvatar, removeAvatar } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const dark = theme === 'dark';
+
+  const from      = searchParams.get('from') === 'home' ? 'home' : 'dashboard';
+  const backHref  = from === 'home' ? '/'    : '/dashboard';
+  const backLabel = from === 'home' ? 'Home' : 'Dashboard';
 
   const fileRef = useRef<HTMLInputElement>(null);
   const [displayName, setDisplayName] = useState('');
@@ -122,8 +127,8 @@ export default function SettingsPage() {
     <div className="min-h-screen p-6 max-w-3xl mx-auto">
       {/* Header */}
       <div className="mb-8 flex items-center gap-3">
-        <Link href="/dashboard" className="text-sm font-dm-sans hover:underline" style={{ color: textSoft }}>
-          ← Dashboard
+        <Link href={backHref} className="text-sm font-dm-sans hover:underline" style={{ color: textSoft }}>
+          ← {backLabel}
         </Link>
         <h1 className="text-2xl font-serif font-bold" style={{ color: textMain }}>Settings</h1>
       </div>

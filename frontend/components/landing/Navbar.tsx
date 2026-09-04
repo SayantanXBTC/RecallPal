@@ -121,7 +121,7 @@ export default function Navbar() {
                   Open Dashboard
                 </Link>
               </motion.div>
-              <Link href="/settings" title={user?.display_name || user?.email || 'Profile'}
+              <Link href="/settings?from=home" title={user?.display_name || user?.email || 'Profile'}
                 className="shrink-0 hover:scale-105 transition-transform">
                 <Avatar src={user?.avatar_url} name={user?.display_name || user?.email} size={34} ring />
               </Link>
