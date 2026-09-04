@@ -1120,11 +1120,11 @@ class FaceEngine:
         logger.info(
             "Enrolled '%s': %d raw embeddings → %d after quality filter "
             "(%d rejected outliers, %d skipped frames, %d save failures). "
-            "Total in memory: %d.",
+            "In-memory cache size: %d.",
             name,
             len(raw_embeddings), len(kept_embeddings),
             n_rejected, skipped, save_failures,
-            len(self.database[name]),
+            len(self.database.get(name, [])),
         )
         return {
             "success":          True,
