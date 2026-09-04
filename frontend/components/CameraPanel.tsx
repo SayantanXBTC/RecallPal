@@ -199,8 +199,10 @@ export default function CameraPanel({ onRecognition, currentResult, onAddRequest
 
   // Stable, tracked faces (survive across frames via IoU matching).
   const [displayFaces, setDisplayFaces] = useState<TrackedFace[]>([]);
-  const nextTrackIdRef = useRef({ v: 1 });
-  const clearTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const displayFacesRef = useRef<TrackedFace[]>([]);
+  const nextTrackIdRef  = useRef({ v: 1 });
+  const clearTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => { displayFacesRef.current = displayFaces; }, [displayFaces]);
 
   // Aging tracks handled inline in captureAndRecognize via reconcileTracks.
 
@@ -265,16 +267,18 @@ export default function CameraPanel({ onRecognition, currentResult, onAddRequest
       });
       if (res.ok) {
         const data = await res.json() as MultiRecognitionResult;
-        // updateDisplayFaces synchronously computes the new tracked list; we
-        // read it back via functional setter to pass stable trackIds upstream.
-        setDisplayFaces((prev) => {
-          const merged = reconcileTracks(prev, data.faces ?? [], nextTrackIdRef.current);
-          onRecognition({
-            faces: merged
-              .filter((f) => f.missedTicks === 0)
-              .map(({ missedTicks: _m, ...rest }) => rest as FaceResult),
-          });
-          return merged;
+        // Reconcile tracks outside of setState so we can hand a stable
+        // snapshot to the parent (setState updaters must stay pure —
+        // triggering onRecognition from inside one crashes React's
+        // "setState during render" invariant).
+        const prev   = displayFacesRef.current;
+        const merged = reconcileTracks(prev, data.faces ?? [], nextTrackIdRef.current);
+        displayFacesRef.current = merged;
+        setDisplayFaces(merged);
+        onRecognition({
+          faces: merged
+            .filter((f) => f.missedTicks === 0)
+            .map(({ missedTicks: _m, ...rest }) => rest as FaceResult),
         });
         if (clearTimerRef.current) { clearTimeout(clearTimerRef.current); clearTimerRef.current = null; }
       }
