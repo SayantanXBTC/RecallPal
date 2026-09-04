@@ -141,7 +141,30 @@ function iou(a: NonNullable<FaceResult['bbox']>, b: NonNullable<FaceResult['bbox
 }
 
 const IOU_MATCH_THRESHOLD = 0.25;
-const MAX_MISSED_TICKS    = 3;   // drop tracks after ~2s of no match
+const IOU_DEDUP_THRESHOLD = 0.55; // collapse duplicate detections of same face
+const MAX_MISSED_TICKS    = 3;    // drop tracks after ~2s of no match
+
+/** Server can return two overlapping bboxes for the same physical face
+ * (RetinaFace occasionally double-fires around glasses / strong shadows).
+ * Collapse those to a single detection before tracking so the overlay
+ * doesn't sprout twin cards. */
+function dedupeFaces(faces: FaceResult[]): FaceResult[] {
+  const kept: FaceResult[] = [];
+  for (const f of faces) {
+    if (!f.bbox) { kept.push(f); continue; }
+    const dup = kept.findIndex(k => k.bbox && iou(k.bbox, f.bbox!) >= IOU_DEDUP_THRESHOLD);
+    if (dup < 0) { kept.push(f); continue; }
+    // Prefer the one with higher confidence; ties -> larger bbox.
+    const keep = f;
+    const held = kept[dup];
+    const fConf = f.confidence ?? 0;
+    const hConf = held.confidence ?? 0;
+    if (fConf > hConf || (fConf === hConf && (f.bbox.w * f.bbox.h) > (held.bbox!.w * held.bbox!.h))) {
+      kept[dup] = keep;
+    }
+  }
+  return kept;
+}
 
 function reconcileTracks(prev: TrackedFace[], next: FaceResult[], nextId: { v: number }): TrackedFace[] {
   const usedPrev = new Set<number>();
@@ -272,7 +295,8 @@ export default function CameraPanel({ onRecognition, currentResult, onAddRequest
         // triggering onRecognition from inside one crashes React's
         // "setState during render" invariant).
         const prev   = displayFacesRef.current;
-        const merged = reconcileTracks(prev, data.faces ?? [], nextTrackIdRef.current);
+        const deduped = dedupeFaces(data.faces ?? []);
+        const merged = reconcileTracks(prev, deduped, nextTrackIdRef.current);
         displayFacesRef.current = merged;
         setDisplayFaces(merged);
         onRecognition({
