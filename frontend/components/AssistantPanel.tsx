@@ -13,7 +13,47 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageCircle, X, Mic, Send, Sparkles, UserPlus, Volume2, VolumeX } from 'lucide-react';
+import { MessageCircle, X, Mic, Send, UserPlus, Volume2, VolumeX } from 'lucide-react';
+
+/** Minimal calm face — used as both the trigger bubble icon and the
+ *  header avatar. Big round eyes + gentle smile, no jargon-y robot vibe. */
+function CalmFace({ size = 22, color = 'white' }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="12" r="10" stroke={color} strokeWidth="1.6" opacity="0.9" />
+      <circle cx="8.5"  cy="10" r="1.3" fill={color} />
+      <circle cx="15.5" cy="10" r="1.3" fill={color} />
+      <path
+        d="M8 14.5 Q12 17.5 16 14.5"
+        stroke={color} strokeWidth="1.6" strokeLinecap="round" fill="none"
+      />
+    </svg>
+  );
+}
+
+const ASSISTANT_NAME = 'JARVIS';
+const ASSISTANT_TAGLINE = 'Always here for you';
+
+/** Remove markdown syntax + special characters that TTS reads out
+ *  literally ("asterisk asterisk name"). Keeps punctuation that speech
+ *  synthesis handles naturally (comma, period, question mark). */
+function sanitizeForSpeech(text: string): string {
+  return text
+    .replace(/```[\s\S]*?```/g, ' ')        // fenced code blocks
+    .replace(/`([^`]+)`/g, '$1')             // inline code
+    .replace(/\*\*([^*]+)\*\*/g, '$1')       // bold
+    .replace(/\*([^*]+)\*/g, '$1')           // italic asterisks
+    .replace(/__([^_]+)__/g, '$1')           // bold underscores
+    .replace(/_([^_]+)_/g, '$1')             // italic underscores
+    .replace(/~~([^~]+)~~/g, '$1')           // strikethrough
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // markdown links -> text
+    .replace(/^#{1,6}\s+/gm, '')             // headings
+    .replace(/^\s*[-*+]\s+/gm, '')           // bullet markers
+    .replace(/^\s*\d+\.\s+/gm, '')           // numbered list markers
+    .replace(/[*_~`>#|\\]/g, ' ')            // any leftover markdown chars
+    .replace(/\s{2,}/g, ' ')                 // collapse whitespace
+    .trim();
+}
 import { useAuth } from '@/lib/auth-context';
 import { useAssistant } from '@/lib/assistant-context';
 
@@ -21,8 +61,16 @@ interface ChatMsg { role: 'user' | 'assistant'; content: string; }
 
 const GREETING: ChatMsg = {
   role: 'assistant',
-  content: 'Hello. I am here to help. Would you like to save someone new, or see who visited today?',
+  content: `Hello, I am ${ASSISTANT_NAME}. I am here to help. Would you like to save someone new, or see who visited today?`,
 };
+
+/** Cancel any speech in flight and drop everything the browser has
+ *  queued. Used when the user mutes or closes the panel. */
+function stopSpeech() {
+  if (typeof window === 'undefined') return;
+  if (!('speechSynthesis' in window)) return;
+  try { window.speechSynthesis.cancel(); } catch { /* no-op */ }
+}
 
 export default function AssistantPanel() {
   const { token } = useAuth();
@@ -60,13 +108,20 @@ export default function AssistantPanel() {
   const speak = useCallback((text: string) => {
     if (muted) return;
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    const cleaned = sanitizeForSpeech(text);
+    if (!cleaned) return;
     try {
       window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text);
+      const u = new SpeechSynthesisUtterance(cleaned);
       u.rate = 0.95; u.pitch = 1.0; u.volume = 1.0;
       window.speechSynthesis.speak(u);
     } catch { /* no-op */ }
   }, [muted]);
+
+  // Killswitch: mute or closing the panel drops queued speech.
+  useEffect(() => { if (muted) stopSpeech(); }, [muted]);
+  useEffect(() => { if (!open)  stopSpeech(); }, [open]);
+  useEffect(() => () => stopSpeech(), []);   // unmount
 
   const send = useCallback(async (raw: string, extraContext?: Record<string, unknown>) => {
     const message = raw.trim();
@@ -146,7 +201,7 @@ export default function AssistantPanel() {
       disabled: !onAddPerson,
     },
     {
-      icon:  <Sparkles size={14} />,
+      icon:  <CalmFace size={14} color="#F0C97A" />,
       label: 'Who is here?',
       run:   () => void send('Who is on camera right now?'),
       disabled: false,
@@ -174,7 +229,7 @@ export default function AssistantPanel() {
             : '0 6px 20px rgba(201,148,58,0.35)',
         }}
       >
-        {open ? <X color="white" size={22} /> : <Sparkles color="white" size={22} />}
+        {open ? <X color="white" size={22} /> : <CalmFace size={26} />}
       </button>
 
       <AnimatePresence>
@@ -196,13 +251,13 @@ export default function AssistantPanel() {
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg,#C9943A,#F0C97A)' }}>
-                  <Sparkles size={14} color="white" />
+                <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg,#C9943A,#F0C97A)' }}>
+                  <CalmFace size={18} />
                 </div>
                 <div>
-                  <p className="font-serif text-sm text-white leading-tight">RecallPal helper</p>
+                  <p className="font-serif text-sm text-white leading-tight">{ASSISTANT_NAME}</p>
                   <p className="font-dm-sans text-[10px] uppercase tracking-widest" style={{ color: 'rgba(240,201,122,0.8)' }}>
-                    Always ready
+                    {ASSISTANT_TAGLINE}
                   </p>
                 </div>
               </div>

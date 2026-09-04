@@ -5,8 +5,6 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { ToastProvider } from '@/components/Toast';
 import { ThemeProvider } from '@/lib/theme-context';
-import { AssistantProvider } from '@/lib/assistant-context';
-import AssistantPanel from '@/components/AssistantPanel';
 
 function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -37,12 +35,9 @@ function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <ToastProvider>
-      <AssistantProvider>
-        <div className="marketing-root font-dm-sans">
-          {children}
-        </div>
-        <AssistantPanel />
-      </AssistantProvider>
+      <div className="marketing-root font-dm-sans">
+        {children}
+      </div>
     </ToastProvider>
   );
 }

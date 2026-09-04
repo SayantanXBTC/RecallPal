@@ -3,6 +3,7 @@ import { Plus_Jakarta_Sans, Playfair_Display, DM_Sans } from 'next/font/google';
 import { AuthProvider } from '@/lib/auth-context';
 import { AccessibilityProvider } from '@/lib/accessibility-context';
 import { ThemeProvider } from '@/lib/theme-context';
+import AssistantMount from '@/components/AssistantMount';
 import './globals.css';
 
 const plusJakarta = Plus_Jakarta_Sans({
@@ -35,7 +36,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${plusJakarta.variable} ${playfair.variable} ${dmSans.variable}`}>
-      <body><AccessibilityProvider><AuthProvider><ThemeProvider>{children}</ThemeProvider></AuthProvider></AccessibilityProvider></body>
+      <body><AccessibilityProvider><AuthProvider><ThemeProvider><AssistantMount>{children}</AssistantMount></ThemeProvider></AuthProvider></AccessibilityProvider></body>
     </html>
   );
 }
