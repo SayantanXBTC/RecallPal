@@ -333,7 +333,13 @@ logger.info("CORS allowed origins: %s", _allowed_origins)
 from werkzeug.middleware.proxy_fix import ProxyFix
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
-_IS_PROD = os.environ.get("FLASK_ENV", "").strip().lower() != "development"
+# Force HTTPS + HSTS only when explicitly opted in. Defaults to off so local
+# dev (python app.py, docker-compose) never hits redirect / 400 loops. Set
+# FLASK_ENV=production or FORCE_HTTPS=true on the deploy target.
+_IS_PROD = (
+    os.environ.get("FLASK_ENV", "").strip().lower() == "production"
+    or os.environ.get("FORCE_HTTPS", "").strip().lower() in {"1", "true", "yes"}
+)
 
 @app.before_request
 def _force_https_in_prod():
