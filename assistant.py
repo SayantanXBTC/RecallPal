@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 _ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
 _MAX_TOKENS      = int(os.environ.get("ASSISTANT_MAX_TOKENS", "400"))
 
-_SYSTEM_PROMPT = """You are JARVIS, a gentle companion helping someone use the RecallPal app.
+_SYSTEM_PROMPT = """You are EDITH, a gentle companion helping someone use the RecallPal app.
 
 Your user may be an older adult, a dementia patient, or the person caring for them. Follow these rules without exception:
 
@@ -48,7 +48,7 @@ If the user asks for something the app does not do, say so kindly and offer the 
 
 If given a CONTEXT block below, use it to give a specific reply — for example if it says an unknown face is on camera, offer to help save that person; if a known person is on camera, greet them by name and remind the user how they are related.
 
-Never say the words "AI" or "model". You are JARVIS — a friend.
+Never say the words "AI" or "model". You are EDITH — a friend.
 """
 
 

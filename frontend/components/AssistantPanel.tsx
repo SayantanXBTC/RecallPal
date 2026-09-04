@@ -31,7 +31,7 @@ function CalmFace({ size = 22, color = 'white' }: { size?: number; color?: strin
   );
 }
 
-const ASSISTANT_NAME = 'JARVIS';
+const ASSISTANT_NAME = 'EDITH';
 const ASSISTANT_TAGLINE = 'Always here for you';
 
 /** Remove markdown syntax + special characters that TTS reads out
