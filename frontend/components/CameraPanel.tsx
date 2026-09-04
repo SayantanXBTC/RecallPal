@@ -140,9 +140,11 @@ function iou(a: NonNullable<FaceResult['bbox']>, b: NonNullable<FaceResult['bbox
   return union > 0 ? inter / union : 0;
 }
 
-const IOU_MATCH_THRESHOLD = 0.25;
-const IOU_DEDUP_THRESHOLD = 0.55; // collapse duplicate detections of same face
-const MAX_MISSED_TICKS    = 3;    // drop tracks after ~2s of no match
+const IOU_MATCH_THRESHOLD    = 0.12;  // lenient — head can move a lot in 700ms
+const CENTER_DIST_RATIO      = 0.55;  // fallback: same face if centres close
+const IOU_DEDUP_THRESHOLD    = 0.55;  // collapse duplicate detections of same face
+const MAX_MISSED_TICKS       = 4;     // drop tracks after ~3s of no match
+const STICKY_UNKNOWN_TICKS   = 5;     // hold last name through this many unknown ticks
 
 /** Server can return two overlapping bboxes for the same physical face
  * (RetinaFace occasionally double-fires around glasses / strong shadows).
@@ -166,19 +168,32 @@ function dedupeFaces(faces: FaceResult[]): FaceResult[] {
   return kept;
 }
 
+/** Squared centre distance between two bboxes, normalised by their mean side.
+ *  Used as an IoU fallback when boxes have moved enough that IoU alone
+ *  fails but they clearly refer to the same face. */
+function centerScore(a: NonNullable<FaceResult['bbox']>, b: NonNullable<FaceResult['bbox']>): number {
+  const acx = a.x + a.w / 2, acy = a.y + a.h / 2;
+  const bcx = b.x + b.w / 2, bcy = b.y + b.h / 2;
+  const dx = acx - bcx, dy = acy - bcy;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const meanSide = (a.w + a.h + b.w + b.h) / 4;
+  if (meanSide <= 0) return Infinity;
+  return dist / meanSide;
+}
+
 function reconcileTracks(prev: TrackedFace[], next: FaceResult[], nextId: { v: number }): TrackedFace[] {
   const usedPrev = new Set<number>();
   const usedNext = new Set<number>();
   const out: TrackedFace[] = [];
 
-  // Greedy IoU matching: pick best pair, repeat.
-  const pairs: { p: number; n: number; score: number }[] = [];
+  type Pair = { p: number; n: number; score: number };
+  const pairs: Pair[] = [];
+
+  // Greedy IoU matching — high score wins first.
   for (let pi = 0; pi < prev.length; pi++) {
-    const pb = prev[pi].bbox;
-    if (!pb) continue;
+    const pb = prev[pi].bbox; if (!pb) continue;
     for (let ni = 0; ni < next.length; ni++) {
-      const nb = next[ni].bbox;
-      if (!nb) continue;
+      const nb = next[ni].bbox; if (!nb) continue;
       const s = iou(pb, nb);
       if (s >= IOU_MATCH_THRESHOLD) pairs.push({ p: pi, n: ni, score: s });
     }
@@ -187,14 +202,36 @@ function reconcileTracks(prev: TrackedFace[], next: FaceResult[], nextId: { v: n
   for (const { p, n } of pairs) {
     if (usedPrev.has(p) || usedNext.has(n)) continue;
     usedPrev.add(p); usedNext.add(n);
-    out.push({ ...next[n], trackId: prev[p].trackId, missedTicks: 0 });
+    out.push(inherit(prev[p], next[n]));
   }
-  // New tracks for unmatched detections.
+
+  // Fallback: nearest-centre match for anything still unpaired. Handles
+  // fast head movement where IoU drops to zero between ticks.
+  const centerPairs: Pair[] = [];
+  for (let pi = 0; pi < prev.length; pi++) {
+    if (usedPrev.has(pi)) continue;
+    const pb = prev[pi].bbox; if (!pb) continue;
+    for (let ni = 0; ni < next.length; ni++) {
+      if (usedNext.has(ni)) continue;
+      const nb = next[ni].bbox; if (!nb) continue;
+      const d = centerScore(pb, nb);
+      if (d <= CENTER_DIST_RATIO) centerPairs.push({ p: pi, n: ni, score: -d });
+    }
+  }
+  centerPairs.sort((a, b) => b.score - a.score);
+  for (const { p, n } of centerPairs) {
+    if (usedPrev.has(p) || usedNext.has(n)) continue;
+    usedPrev.add(p); usedNext.add(n);
+    out.push(inherit(prev[p], next[n]));
+  }
+
+  // New tracks for anything still unmatched.
   for (let ni = 0; ni < next.length; ni++) {
     if (usedNext.has(ni)) continue;
     out.push({ ...next[ni], trackId: nextId.v++, missedTicks: 0 });
   }
-  // Keep stale tracks briefly (helps card not flicker between frames).
+
+  // Keep stale tracks briefly so cards don't blink out on a missed frame.
   for (let pi = 0; pi < prev.length; pi++) {
     if (usedPrev.has(pi)) continue;
     if (prev[pi].missedTicks + 1 <= MAX_MISSED_TICKS) {
@@ -202,6 +239,33 @@ function reconcileTracks(prev: TrackedFace[], next: FaceResult[], nextId: { v: n
     }
   }
   return out;
+}
+
+/** Merge an incoming detection into an existing track, preserving the
+ *  previous recognition when the new frame briefly returns 'unknown'.
+ *  This kills the flicker where a real person momentarily becomes
+ *  "Unknown" between two positive frames. */
+function inherit(prevTrack: TrackedFace, incoming: FaceResult): TrackedFace {
+  const wasRecognized     = prevTrack.status === 'recognized' && !!prevTrack.name;
+  const incomingUnknown   = incoming.status !== 'recognized' || !incoming.name;
+  const stickyBudget      = (prevTrack.missedTicks ?? 0) < STICKY_UNKNOWN_TICKS;
+
+  if (wasRecognized && incomingUnknown && stickyBudget) {
+    // Keep the identity, refresh bbox, count this frame against the sticky budget.
+    return {
+      ...prevTrack,
+      bbox:         incoming.bbox,
+      frame_width:  incoming.frame_width,
+      frame_height: incoming.frame_height,
+      missedTicks:  (prevTrack.missedTicks ?? 0) + 1,
+    };
+  }
+
+  return {
+    ...incoming,
+    trackId:     prevTrack.trackId,
+    missedTicks: 0,
+  };
 }
 
 export default function CameraPanel({ onRecognition, currentResult, onAddRequest, onAddPhotosRequest }: CameraPanelProps) {
