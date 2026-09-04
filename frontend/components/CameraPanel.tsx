@@ -662,50 +662,44 @@ export default function CameraPanel({ onRecognition, currentResult, onAddRequest
                     </button>
                   </>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                    {/* Name + relation */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-                      <span style={{
-                        width: 7, height: 7, borderRadius: '50%',
-                        background: 'linear-gradient(135deg,#C9943A,#F0C97A)',
-                        flexShrink: 0,
-                        boxShadow: '0 0 6px rgba(201,148,58,0.7)',
-                        display: 'inline-block',
-                      }} />
-                      <span style={{ color: '#F5EFE8', fontWeight: 700, fontSize: 15, letterSpacing: '-0.01em', lineHeight: 1 }}>
-                        {displayName}
-                      </span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {/* Warm greeting: "This is Sayantan, your son." */}
+                    <p style={{
+                      color: '#F5EFE8',
+                      fontFamily: 'var(--font-playfair), Georgia, serif',
+                      fontSize: 17,
+                      lineHeight: 1.25,
+                      margin: 0,
+                    }}>
+                      This is{' '}
+                      <span style={{ fontWeight: 700, color: '#F0C97A' }}>{displayName}</span>
                       {face.memory?.relation && (
-                        <span style={{
-                          background: 'rgba(201,148,58,0.18)',
-                          border: '1px solid rgba(201,148,58,0.35)',
-                          borderRadius: 20,
-                          padding: '2px 8px',
-                          color: '#C9943A',
-                          fontSize: 11,
-                          fontWeight: 600,
-                          letterSpacing: '0.01em',
-                          lineHeight: 1.4,
-                        }}>
-                          {face.memory.relation}
-                        </span>
+                        <>
+                          , your{' '}
+                          <span style={{ fontWeight: 700, color: '#F0C97A' }}>
+                            {face.memory.relation.toLowerCase()}
+                          </span>
+                        </>
                       )}
-                    </div>
+                      .
+                    </p>
 
-                    {/* Age + last seen */}
+                    {/* Second sentence — soft context */}
                     {(face.memory?.age != null || face.memory?.last_seen) && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <p style={{
+                        color: 'rgba(245,239,232,0.68)',
+                        fontSize: 12,
+                        lineHeight: 1.4,
+                        margin: 0,
+                      }}>
                         {face.memory?.age != null && (
-                          <span style={{ color: '#C9943A', fontSize: 11, fontWeight: 600 }}>
-                            {face.memory.age} yrs
-                          </span>
+                          <>They are {face.memory.age} years old.</>
                         )}
+                        {face.memory?.age != null && face.memory?.last_seen && ' '}
                         {face.memory?.last_seen && (
-                          <span style={{ color: 'rgba(245,239,232,0.45)', fontSize: 10 }}>
-                            · {formatLastSeen(face.memory.last_seen)}
-                          </span>
+                          <>You saw them {formatLastSeen(face.memory.last_seen)}.</>
                         )}
-                      </div>
+                      </p>
                     )}
 
                     {/* Likes */}

@@ -41,15 +41,21 @@ export default function VisitHistory({ refreshTrigger = 0 }: VisitHistoryProps) 
 
   useEffect(() => {
     let cancelled = false;
+    const load = () => {
+      fetch('/api/events?limit=50', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+        .then((r) => r.json())
+        .then((d) => { if (!cancelled) setEvents(d.events ?? []); })
+        .catch(() => { if (!cancelled) setEvents([]); })
+        .finally(() => { if (!cancelled) setLoading(false); });
+    };
     setLoading(true);
-    fetch('/api/events?limit=50', {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-      .then((r) => r.json())
-      .then((d) => { if (!cancelled) setEvents(d.events ?? []); })
-      .catch(() => { if (!cancelled) setEvents([]); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    load();
+    // Refresh every 15s so newly recorded visits appear without the
+    // caregiver having to add/delete a person to bump refreshTrigger.
+    const timer = setInterval(load, 15_000);
+    return () => { cancelled = true; clearInterval(timer); };
   }, [refreshTrigger, token]);
 
   const handleClearAll = async () => {
