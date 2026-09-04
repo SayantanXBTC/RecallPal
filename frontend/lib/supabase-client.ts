@@ -21,10 +21,14 @@ export function getSupabaseBrowser(): SupabaseClient | null {
   if (_client) return _client;
   _client = createClient(URL, ANON, {
     auth: {
-      persistSession:     false, // AuthContext owns storage
-      autoRefreshToken:   false, // backend refresh flow handles this
-      detectSessionInUrl: false, // /auth/callback parses the URL explicitly
-      flowType: 'pkce',
+      persistSession:     false,   // AuthContext owns storage
+      autoRefreshToken:   false,   // backend refresh flow handles this
+      detectSessionInUrl: false,   // /auth/callback parses the URL explicitly
+      // Implicit flow returns access_token+refresh_token in the URL
+      // fragment. PKCE would need a code_verifier persisted between the
+      // outbound signInWithOAuth call and the callback — impossible when
+      // persistSession is off.
+      flowType: 'implicit',
     },
   });
   return _client;
