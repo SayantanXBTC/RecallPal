@@ -1,360 +1,213 @@
-# Dementia Assist — AI Memory Companion
+# RecallPal
 
-Real-time face recognition system that helps dementia patients recognise people and recall contextual memories about them.
+Hey — I built this because my grandmother stopped recognising me last winter, and there was nothing on the shelf that felt gentle enough to actually put in her home. Everything was either a hospital-grade device with a price tag to match, or a face-unlock demo dressed up as an app.
 
----
-
-## Features
-
-- **Live face recognition** — ArcFace model identifies multiple faces simultaneously from the webcam feed
-- **Memory recall** — displays each person's name, relationship, age, last-seen time, interests, and a personalised conversation suggestion
-- **Face card overlay** — non-intrusive card appears beside each detected face, following movement in real time
-- **Multi-face support** — up to N people recognised in a single frame simultaneously
-- **Live enrolment** — capture 5–10 photos or upload from device, fill in details, immediately recognisable in the next scan cycle
-- **Add more photos** — improve recognition accuracy by appending photos to existing people at any time
-- **Visit history** — timestamped log of every recognition event with clear-all option
-- **Daily summary** — end-of-day recap showing who visited, how many times, their interests and notes
-- **People management** — view enrolled people, edit details, delete people
-- **Dark / light theme** — full dark mode support
-- **Accessibility panel** — font size and contrast controls
+RecallPal is a webcam sits on the table. When someone walks in, a soft card slides in beside their face saying "This is Sayantan, your grandson, 22, likes chess." The voice announces it too, once, quietly. That's it. No alarms. No dashboards. No "engagement metrics."
 
 ---
 
-## How It Works
+## What it does
 
-1. Webcam continuously captures frames and sends them to the Flask backend
-2. ArcFace model (via DeepFace) extracts 512-dimensional embeddings per detected face
-3. Embeddings are compared against per-user vectors stored in Supabase using cosine similarity
-4. Matched person's memory is retrieved from the Supabase `people` table
-5. UI renders a face card beside each recognised face with name, relation, likes, notes, and a conversation suggestion
-6. Every recognition event is logged to `recognition_events` for visit history and daily summaries
+- **Live face recognition** — webcam feed → face detected → matched against people the caregiver has enrolled → memory card overlaid on screen.
+- **Voice cue** — a natural-sounding sentence spoken the moment recognition happens: *"This is Alice, your daughter."* Once per person, per visit. Silent for strangers.
+- **Memory recall** — name, relation, age, likes/interests, notes, "last seen" timestamp, and a small conversation suggestion ("Ask Alice about her garden") because the hardest part isn't recognising — it's what to say next.
+- **Face tracking across frames** — cards follow the right face when more than one person is in the room. No mixing up.
+- **Enrol in seconds** — 5–10 webcam snaps of a person, a name, relation, done. Behind the scenes each photo becomes a 512-d vector.
+- **Consent + audit built in** — biometric data is Article 9 special-category under GDPR, so every enrol requires an explicit consent record, every deletion is logged, and there's a one-click "erase everything about me" endpoint.
+- **Visit log + daily recap** — who visited today, how many times, first / last time.
 
 ---
 
-## Prerequisites
+## How it works (quick version)
 
-- Python 3.10+
-- Node.js 18+
-- **Supabase account** — [supabase.com](https://supabase.com) (free tier works)
+```
+webcam → Next.js frontend → Flask backend → insightface (ArcFace ONNX) → 512-d vector
+                                          ↓
+                             pgvector HNSW k-NN in Supabase
+                                          ↓
+                          nearest person + memory + suggestion
+                                          ↓
+                       face card overlay + one-shot TTS on the client
+```
+
+- **Detection + embedding:** [insightface](https://github.com/deepinsight/insightface) `buffalo_l` bundle — RetinaFace detects faces, then 5-point landmark alignment, then ArcFace r100 produces the embedding. All in one forward pass, all ONNX. GPU when available, CPU when not.
+- **Storage:** Supabase (Postgres + pgvector). One HNSW index on the embeddings column, tuned `m=16, ef_construction=64`.
+- **Search:** `match_face_embeddings(query, k, threshold, user_id)` — a `SECURITY DEFINER` SQL function so the k-NN is scoped to the caregiver's own rows even though the server uses the service-role key.
+- **Auth:** Supabase Auth JWTs, verified against JWKS (asymmetric ES256/RS256) with an HS256 fallback for legacy projects. RLS on every table.
+
+---
+
+## Stack
+
+| Layer            | What                                                        |
+|------------------|-------------------------------------------------------------|
+| Frontend         | Next.js 15 (App Router), React 19, Tailwind, Framer Motion  |
+| Backend          | Flask, Gunicorn, python-jose, flask-limiter, flask-cors     |
+| Face ML          | insightface (RetinaFace + ArcFace r100, ONNX runtime)       |
+| Database         | Supabase — Postgres + pgvector (HNSW index)                 |
+| Auth             | Supabase Auth (JWT, HS256 / ES256 via JWKS)                 |
+| Observability    | Sentry + structlog JSON logs + Prometheus (`/metrics`)      |
+| Optional GPU     | Split inference microservice + Redis-backed RQ queue        |
+| Deploy           | Vercel (frontend) + Render (backend) — HTTPS auto           |
+
+---
+
+## Running it locally
+
+You need:
+
+- Python 3.10+ (3.11 is what I use)
+- Node 18+
+- A Supabase project (free tier is fine)
 - A webcam
 
----
+### 1. Supabase
 
-## Quick Start
+Create a project at supabase.com. Open the SQL editor and run these files **in order**:
 
-### 1. Create a Supabase project
+1. `supabase_schema.sql` — base tables (`profiles`, `people`, `face_embeddings`, `recognition_events`).
+2. `migrations/001_pgvector_hnsw.sql` — denormalised `user_id`, tuned HNSW index, `match_face_embeddings` RPC.
+3. `migrations/002_consent_audit.sql` — `consents` + `audit_log` tables + right-to-erasure RPC.
 
-1. Go to [supabase.com](https://supabase.com) and create a new project.
-2. Open the SQL editor and run `supabase_schema.sql` from the project root to create all tables (`profiles`, `people`, `face_embeddings`, `recognition_events`).
-3. Then run `migrations/001_pgvector_hnsw.sql` to add the denormalised `user_id` column, tuned HNSW index, and the `match_face_embeddings` RPC used for server-side k-NN.
-4. Then run `migrations/002_consent_audit.sql` to add the `consents` + `audit_log` tables plus the `delete_user_data` right-to-erasure RPC.
+Then Settings → API — grab:
 
-> **Re-enrolment note:** the recognition pipeline now uses landmark-aligned faces via insightface RetinaFace (previously Haar-cropped). Embedding dimensionality is unchanged (512-d ArcFace r50) so old rows keep working, but for best accuracy re-enrol existing people once after upgrading. Use the "Add more photos" flow from the People sidebar to append fresh insightface-aligned embeddings.
-4. In the Supabase dashboard go to **Settings → API** and copy:
-   - **Project URL** → `SUPABASE_URL`
-   - **service_role** secret → `SUPABASE_SERVICE_KEY`
-   - **anon** public key → `SUPABASE_ANON_KEY`
-   - **JWT Secret** (Settings → API → JWT Settings) → `SUPABASE_JWT_SECRET`
+- Project URL
+- `service_role` secret
+- `anon` public key
+- JWT Secret (Settings → API → JWT Settings)
 
-### 2. Configure environment variables
+### 2. Backend
 
 ```bash
 cp .env.example .env
+# fill in the four SUPABASE_* keys + a random FLASK_SECRET_KEY
+pip install -r requirements.txt
+python app.py
 ```
 
-Edit `.env` and fill in the keys from the previous step:
+First run downloads the buffalo_l model bundle (~300 MB) into `~/.insightface/`. Takes a minute, only happens once.
 
-```
-SUPABASE_URL=https://xxxx.supabase.co
-SUPABASE_SERVICE_KEY=eyJ...
-SUPABASE_ANON_KEY=eyJ...
-SUPABASE_JWT_SECRET=your-jwt-secret
-FLASK_SECRET_KEY=any-random-string
-```
+Listens on `:5000`.
 
-### 3. Install dependencies and start
+### 3. Frontend
 
 ```bash
-bash run.sh
+cd frontend
+npm install
+npm run dev
 ```
 
-This installs backend and frontend dependencies then starts both services:
-
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:5000
+Opens on `:3000`. Register → grant camera permission → done.
 
 ---
 
-## Architecture
+## Deploying
 
-```
-frontend/                     Next.js (App Router) + Tailwind CSS + Framer Motion
-├── app/
-│   ├── (app)/
-│   │   ├── dashboard/        Main camera + recognition screen
-│   │   ├── summary/          Daily visit summary
-│   │   └── settings/         User preferences (alert threshold)
-│   └── (marketing)/          Landing page, login, register
-├── components/
-│   ├── CameraPanel.tsx        Webcam capture + face card overlays
-│   ├── PeopleSidebar.tsx      Enrolled people list + add/edit/delete
-│   ├── AddPersonModal.tsx     Live enrolment flow (camera + upload)
-│   ├── AddPhotosModal.tsx     Append photos to existing person
-│   ├── VisitHistory.tsx       Recognition event log
-│   ├── AlertBanner.tsx        Absence alert notifications
-│   └── AccessibilityPanel.tsx Font size + contrast controls
-└── lib/
-    ├── types.ts               Shared TypeScript interfaces
-    ├── auth-context.tsx        JWT auth state
-    └── theme-context.tsx       Dark/light theme state
+**Backend on Render:**
 
-app.py                         Flask REST API
-face_engine.py                 ArcFace embedding engine (DeepFace + OpenCV)
-supabase_memory.py             Supabase-backed memory and event manager
-supabase_schema.sql            Full database schema with RLS policies
-```
+- New Web Service → point at this repo → Environment: Docker → Root: `/` (Dockerfile is at repo root).
+- Env vars: same keys as `.env`, plus `ALLOWED_ORIGINS=https://your-vercel-url.vercel.app`.
+
+Render terminates TLS automatically — HTTPS just works. The app also sends HSTS + Referrer-Policy + X-Frame-Options + Permissions-Policy headers on every response.
+
+**Frontend on Vercel:**
+
+- Import the repo → set root to `frontend/`.
+- One env var: `BACKEND_URL=https://your-render-url.onrender.com`.
+- Deploy.
+
+Vercel handles HTTPS + edge caching, plus my `next.config.js` also emits the security headers as a belt-and-braces layer.
+
+**If you scale past a single pod:**
+
+The repo also ships `Dockerfile.inference` (GPU insightface worker) and `Dockerfile.worker` (RQ enrol worker) plus a full `docker-compose.yml`. Wire it up with `INFERENCE_URL` + `REDIS_URL` env vars on the web pod and enrol becomes async, recognize goes to the GPU pod.
 
 ---
 
-## Deployment
+## Security posture (why I care)
 
-### Backend → Render
+Face embeddings are biometric data. Under GDPR they're **special category** — misusing them is a "please pay a lot of money" mistake. So:
 
-1. Push this repo to GitHub.
-2. Go to [render.com](https://render.com) → New → Web Service → connect your repo.
-3. Set the following in Render's service settings:
-   - **Environment:** Docker
-   - **Branch:** main
-   - **Root Directory:** _(leave blank — Dockerfile is at repo root)_
-4. Add environment variables in Render → Environment (same keys as `.env`).
-5. Click Deploy. Copy the public Render URL (e.g. `https://dementia-assist.onrender.com`).
+- **JWT signature verified on every request** — HS256 or ES256/RS256 via JWKS. `alg=none` rejected. `service_role` tokens rejected on user routes.
+- **Row Level Security everywhere.** Every `select`/`insert`/`update`/`delete` policy checks `user_id = auth.uid()`. Tested against anon-key spoofing.
+- **CORS is an explicit allowlist**, never `*`.
+- **Rate limits** on `/recognize` (30/min), `/add-person` (10/h), `/auth/login` (10/min), `/auth/signup` (5/h).
+- **HTTPS forced** in production; HSTS preload; secure headers on every response.
+- **No tracebacks in API responses** — errors log to Sentry, users see a friendly message.
+- **Consent gate** — enrolment refuses without an active `consents` row for the subject. Grant/revoke is versioned, revocation is soft-delete so the paper trail survives.
+- **Audit log** — enrol / delete / consent / erase all append to `audit_log`. Clients can `select` their own rows, no client can `insert` (RLS + `service_role` only).
+- **Right to erasure** — `DELETE /api/me` calls a `SECURITY DEFINER` cascade that wipes profile → people → embeddings → events → consents in one go, then logs the erasure.
+- **Local liveness heuristics** — Laplacian blur, pose variance, pairwise cosine dup detection reject the most common spoof attempts at enrol.
+- **`.env` never committed.** `.gitignore` blocks it plus `*.pem`, `*.key`, `credentials*.json`, `service-account*.json`.
 
-> **Note:** Render's free tier spins down after 15 minutes of inactivity. The first request after sleep takes ~30s to cold-start. Upgrade to a paid instance ($7/mo) to avoid this.
-
-### Frontend → Vercel
-
-1. Import the repo at [vercel.com](https://vercel.com) → New Project.
-2. `vercel.json` sets the correct root directory automatically.
-3. Add one environment variable in Vercel → Settings → Environment Variables:
-   - `BACKEND_URL` = your Render URL from the step above
-4. Deploy.
-
-After first setup, every `git push` to `main` auto-deploys both services.
+Still missing (roadmap): full-strength liveness (MiniFASNet / rPPG), signed audit trail (hash-chained), DPIA doc, DPA with Supabase + Render.
 
 ---
 
-## API Reference
+## API cheat-sheet
 
-All protected routes require `Authorization: Bearer <access_token>`.
+Everything under `/api/*`. Auth = `Authorization: Bearer <access_token>` unless noted.
 
-### Auth
-
-| Method | Route | Description |
-|--------|-------|-------------|
-| POST | `/api/auth/signup` | Create a new account |
-| POST | `/api/auth/login` | Sign in, returns `access_token` |
-| GET | `/api/auth/me` | Get current user profile |
-
-#### POST `/api/auth/signup`
-
-```json
-{ "email": "user@example.com", "password": "secret" }
-```
-
-Response:
-```json
-{
-  "status": "success",
-  "access_token": "eyJ...",
-  "refresh_token": "...",
-  "expires_in": 3600,
-  "user": { "id": "uuid", "email": "user@example.com" }
-}
-```
-
-#### POST `/api/auth/login`
-
-Same request shape as signup. Returns the same response shape with a live `access_token`.
-
-#### GET `/api/auth/me`
-
-```json
-{
-  "status": "success",
-  "user": { "id": "uuid", "email": "user@example.com", "created_at": "..." }
-}
-```
+| Method | Route                          | Auth | What                                              |
+|--------|--------------------------------|------|---------------------------------------------------|
+| GET    | `/api/health`                  | no   | liveness + subsystem status                       |
+| GET    | `/api/ready`                   | no   | readiness — pings Supabase + inference            |
+| POST   | `/api/auth/signup`             | no   | new account                                       |
+| POST   | `/api/auth/login`              | no   | returns access + refresh tokens                   |
+| POST   | `/api/auth/refresh`            | no   | refresh access token                              |
+| GET    | `/api/auth/me`                 | yes  | current user profile                              |
+| POST   | `/api/recognize`               | yes  | identify all faces in one frame                   |
+| POST   | `/api/add-person`              | yes  | enrol (accepts inline consent block)              |
+| POST   | `/api/add-photos`              | yes  | more embeddings for an existing person            |
+| POST   | `/api/update-person`           | yes  | update metadata                                   |
+| POST   | `/api/delete-person`           | yes  | remove one person                                 |
+| GET    | `/api/people`                  | yes  | list enrolled                                     |
+| GET    | `/api/consent`                 | yes  | list active consents                              |
+| POST   | `/api/consent`                 | yes  | grant biometric consent                           |
+| DELETE | `/api/consent/<id>`            | yes  | revoke                                            |
+| GET    | `/api/audit`                   | yes  | user-scoped audit log                             |
+| DELETE | `/api/me`                      | yes  | right-to-erasure — wipes everything               |
+| GET    | `/api/events`                  | yes  | visit history                                     |
+| GET    | `/api/daily-summary`           | yes  | today's visitor recap                             |
+| GET    | `/metrics`                     | no   | Prometheus scrape                                 |
 
 ---
 
-### Recognition
+## What I got wrong (so far)
 
-| Method | Route | Auth | Description |
-|--------|-------|------|-------------|
-| GET | `/api/health` | No | System status |
-| POST | `/api/recognize` | Yes | Identify all faces in a webcam frame |
-
-#### GET `/api/health`
-
-```json
-{
-  "status": "ok",
-  "face_db_loaded": true,
-  "people_count": 4,
-  "memory_backend": "supabase"
-}
-```
-
-#### POST `/api/recognize`
-
-```json
-{ "image": "<base64-encoded JPEG frame>" }
-```
-
-Response:
-```json
-{
-  "faces": [
-    {
-      "status": "recognized",
-      "name": "Alice",
-      "confidence": 0.87,
-      "memory": {
-        "relation": "Daughter",
-        "notes": "Lives in London",
-        "last_seen": "2024-01-15T10:30:00Z",
-        "age": 35,
-        "likes": ["gardening", "music"]
-      },
-      "suggestion": "Ask Alice about her garden",
-      "bbox": { "x": 120, "y": 80, "w": 160, "h": 160 },
-      "frame_width": 640,
-      "frame_height": 480
-    }
-  ]
-}
-```
-
-`status` per face: `recognized` · `unknown`
+- **First cut used DeepFace + TensorFlow.** ~500 MB of dependencies for one model. Swapped to insightface ONNX — recognition is faster and the docker image is ~40% smaller.
+- **First cut stored embeddings in a local pickle.** Broke horizontal scaling instantly. Moved to pgvector with an HNSW index; k-NN is now server-side and multi-pod safe.
+- **First cut had `verify_signature: False` on the JWT decode.** That is exactly as bad as it sounds. Fixed with proper HS256 verification and later added JWKS support for Supabase's newer signing keys.
+- **First blur threshold was 45.** Every normal home webcam failed it. Dropped to 12; genuinely blurred frames still get rejected.
 
 ---
 
-### People
+## Structure
 
-| Method | Route | Auth | Description |
-|--------|-------|------|-------------|
-| GET | `/api/people` | Yes | List all enrolled people |
-| POST | `/api/add-person` | Yes | Enrol a new person with photos |
-| POST | `/api/add-photos` | Yes | Append photos to existing person |
-| POST | `/api/update-person` | Yes | Update name, relation, notes, age, likes |
-| POST | `/api/delete-person` | Yes | Remove person and all their embeddings |
-| POST | `/api/confirm-person` | Yes | Manual confirmation fallback |
-
-#### POST `/api/add-person`
-
-```json
-{
-  "name": "Alice",
-  "relation": "Daughter",
-  "notes": "Lives in London",
-  "age": 35,
-  "likes": ["gardening", "music"],
-  "images": ["<base64>", "<base64>", "..."]
-}
 ```
-
-Minimum 3 images required. Recommended 8–10 for best accuracy.
-
-#### POST `/api/add-photos`
-
-```json
-{
-  "name": "Alice",
-  "images": ["<base64>", "<base64>", "..."]
-}
-```
-
-#### POST `/api/update-person`
-
-```json
-{
-  "name": "Alice",
-  "relation": "Daughter",
-  "notes": "Lives in London",
-  "age": 35,
-  "likes": ["gardening", "music"]
-}
+dementia-assist/
+├── app.py                       # Flask REST API — auth, recognize, enrol, consent
+├── face_engine.py               # insightface wrapper + Supabase embedding store
+├── inference_service.py         # optional GPU-pod microservice
+├── inference_client.py          # calls the microservice or runs in-process
+├── enrol_queue.py               # RQ dispatcher for async enrol
+├── consent.py                   # grant / revoke / audit helpers
+├── liveness.py                  # blur + pose + dup checks
+├── observability.py             # Sentry + structlog + Prometheus
+├── supabase_schema.sql          # base tables
+├── migrations/                  # ordered SQL migrations
+├── frontend/
+│   ├── app/                     # Next.js App Router pages
+│   ├── components/              # CameraPanel, PeopleSidebar, AddPersonModal, ...
+│   └── lib/                     # auth-context, theme-context, types
+├── Dockerfile                   # web pod
+├── Dockerfile.inference         # GPU insightface pod
+├── Dockerfile.worker            # RQ enrol worker
+└── docker-compose.yml           # local 4-service stack
 ```
 
 ---
 
-### Visit History & Summary
+## Thanks
 
-| Method | Route | Auth | Description |
-|--------|-------|------|-------------|
-| GET | `/api/events` | Yes | Recent recognition events (max 50) |
-| DELETE | `/api/events` | Yes | Clear all visit logs for current user |
-| GET | `/api/daily-summary` | Yes | Today's visitor summary with per-person stats |
-
-#### GET `/api/events?limit=50`
-
-```json
-{
-  "events": [
-    {
-      "id": "uuid",
-      "person_name": "alice",
-      "confidence": 0.87,
-      "recognized_at": "2024-01-15T10:30:00Z"
-    }
-  ]
-}
-```
-
-#### GET `/api/daily-summary`
-
-```json
-{
-  "date": "2024-01-15",
-  "total_visitors": 2,
-  "visitors": [
-    {
-      "person_name": "alice",
-      "relation": "Daughter",
-      "notes": "Lives in London",
-      "likes": ["gardening", "music"],
-      "visit_count": 3,
-      "first_seen": "2024-01-15T09:00:00Z",
-      "last_seen": "2024-01-15T14:30:00Z"
-    }
-  ]
-}
-```
-
----
-
-## Environment Variables
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `SUPABASE_URL` | Yes | Supabase project URL |
-| `SUPABASE_SERVICE_KEY` | Yes | Service-role key — server only, never exposed to browser |
-| `SUPABASE_ANON_KEY` | Yes | Anon key for auth endpoints |
-| `SUPABASE_JWT_SECRET` | Yes (prod) | JWT signing secret for token verification |
-| `FLASK_SECRET_KEY` | Yes | Flask session secret |
-| `BACKEND_URL` | Prod only | Full URL of deployed Flask backend — set in Vercel |
-| `DEFAULT_USER_ID` | Dev only | Skip JWT auth in local dev without Supabase |
-| `FLASK_DEBUG` | No | Enable Flask debug mode (default: true) |
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Frontend | Next.js 15, React 19, Tailwind CSS, Framer Motion |
-| Backend | Flask, Gunicorn |
-| Face recognition | DeepFace (ArcFace model), OpenCV |
-| Database | Supabase (PostgreSQL + pgvector) |
-| Auth | Supabase Auth (JWT, HS256) |
-| Deployment | Vercel (frontend) + Render (backend) |
+To my grandmother, for putting up with me pointing a laptop at her face for a week straight while I calibrated thresholds. And to every unpaid family caregiver who quietly holds someone else's memory for them — this is meant for you.

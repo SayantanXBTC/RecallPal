@@ -3,9 +3,26 @@
 
 # ── Environment / secrets ──────────────────────────────────────────────────
 .env
-.env.local
-.env.*.local
-frontend/.env.local
+.env.*
+!.env.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.local.example
+
+# ── Credentials, keys, certs ───────────────────────────────────────────────
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*.der
+credentials*.json
+service-account*.json
+*_secret*
+*_secrets*
+serviceAccount*.json
+gcp-*.json
 
 # ── Python ─────────────────────────────────────────────────────────────────
 __pycache__/

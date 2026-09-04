@@ -328,6 +328,53 @@ CORS(
 )
 logger.info("CORS allowed origins: %s", _allowed_origins)
 
+# Trust the reverse-proxy so request.is_secure / remote_addr reflect the
+# original client rather than the load balancer's private hop.
+from werkzeug.middleware.proxy_fix import ProxyFix
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+_IS_PROD = os.environ.get("FLASK_ENV", "").strip().lower() != "development"
+
+@app.before_request
+def _force_https_in_prod():
+    """Redirect HTTP → HTTPS in production. Terminated at the LB, but if any
+    request slips through with X-Forwarded-Proto=http we bounce it."""
+    if not _IS_PROD:
+        return None
+    if request.is_secure:
+        return None
+    # Health checks from internal probes are allowed on HTTP.
+    if request.path in ("/api/health", "/api/ready"):
+        return None
+    if request.method != "GET":
+        return jsonify({"status": "error", "message": "HTTPS required."}), 400
+    from flask import redirect
+    return redirect(request.url.replace("http://", "https://", 1), code=301)
+
+
+@app.after_request
+def _security_headers(resp):
+    """OWASP-recommended headers. Set on every response — cheap belt-and-braces
+    even though most are also configurable at the CDN / reverse-proxy layer."""
+    # Prevent MIME sniffing
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    # Deny framing (clickjacking)
+    resp.headers.setdefault("X-Frame-Options", "DENY")
+    # Referrer discipline — don't leak paths to third parties
+    resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    # Restrict powerful browser features to what we actually need
+    resp.headers.setdefault(
+        "Permissions-Policy",
+        "camera=(self), microphone=(), geolocation=(), payment=()",
+    )
+    # HSTS only in prod (browsers cache this — never send in dev over localhost)
+    if _IS_PROD:
+        resp.headers.setdefault(
+            "Strict-Transport-Security",
+            "max-age=31536000; includeSubDomains; preload",
+        )
+    return resp
+
 # Rate limiting — protects expensive endpoints (recognize, add-person) from abuse.
 # Uses in-memory storage by default; set RATELIMIT_STORAGE_URI=redis://... in prod
 # for multi-instance deployments.
@@ -880,7 +927,7 @@ def add_person():
         err = traceback.format_exc()
         logger.error("Error in POST /api/add-person:\n%s", err)
         return (
-            jsonify({"status": "error", "message": f"Server Error: {str(e)}", "trace": err}),
+            jsonify({"status": "error", "message": "Could not save person. Please try again."}),
             500,
         )
 
@@ -1166,7 +1213,7 @@ def delete_person():
     except Exception:
         tb = traceback.format_exc()
         logger.error("Error in POST /api/delete-person:\n%s", tb)
-        return jsonify({"status": "error", "message": "Delete failed", "detail": tb}), 500
+        return jsonify({"status": "error", "message": "Delete failed"}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -1682,11 +1729,8 @@ def debug_face():
         return jsonify({"status": "ok", "results": results})
 
     except Exception as exc:
-        return jsonify({
-            "status": "error",
-            "error":  str(exc),
-            "trace":  traceback.format_exc(),
-        }), 500
+        logger.error("debug-face failed: %s\n%s", exc, traceback.format_exc())
+        return jsonify({"status": "error", "message": "Debug pipeline failed."}), 500
 
 
 # ---------------------------------------------------------------------------
