@@ -161,6 +161,7 @@ const STICKY_UNKNOWN_TICKS   = 5;     // hold last name through this many unknow
  *      card end up stacked on the same head. */
 function dedupeFaces(faces: FaceResult[]): FaceResult[] {
   const isRec = (f: FaceResult) => f.status === 'recognized' && !!f.name;
+  const sameId = (a: FaceResult, b: FaceResult) => isRec(a) && isRec(b) && a.name === b.name;
   const kept: FaceResult[] = [];
   for (const f of faces) {
     if (!f.bbox) { kept.push(f); continue; }
@@ -168,12 +169,31 @@ function dedupeFaces(faces: FaceResult[]): FaceResult[] {
     // Tier 1: strong overlap.
     let dup = kept.findIndex(k => k.bbox && iou(k.bbox, f.bbox!) >= IOU_DEDUP_THRESHOLD);
 
-    // Tier 2: soft overlap when one side is recognized and the other unknown.
+    // Tier 2: cross-status pair (recognized vs unknown) with any overlap.
     if (dup < 0) {
       dup = kept.findIndex((k) => {
         if (!k.bbox) return false;
-        if (isRec(f) === isRec(k)) return false;   // both same status -> only tier 1
+        if (isRec(f) === isRec(k)) return false;
         return iou(k.bbox, f.bbox!) >= 0.10 || centerScore(k.bbox, f.bbox!) <= 0.70;
+      });
+    }
+
+    // Tier 3: same recognized identity — RetinaFace fired twice at
+    // different scales on the same head, collapse on centre proximity.
+    if (dup < 0) {
+      dup = kept.findIndex((k) => {
+        if (!k.bbox) return false;
+        if (!sameId(f, k)) return false;
+        return iou(k.bbox, f.bbox!) >= 0.15 || centerScore(k.bbox, f.bbox!) <= 0.75;
+      });
+    }
+
+    // Tier 4: same-status unknowns close together — likely same face.
+    if (dup < 0) {
+      dup = kept.findIndex((k) => {
+        if (!k.bbox) return false;
+        if (isRec(f) || isRec(k)) return false;
+        return centerScore(k.bbox, f.bbox!) <= 0.55;
       });
     }
 
