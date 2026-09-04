@@ -20,13 +20,15 @@ export interface AuthUser {
 }
 
 interface AuthContextValue {
-  user:         AuthUser | null;
-  token:        string   | null;
-  loading:      boolean;
-  login:        (email: string, password: string) => Promise<void>;
-  signup:       (email: string, password: string) => Promise<void>;
-  logout:       () => void;
-  refreshToken: () => Promise<boolean>;
+  user:            AuthUser | null;
+  token:           string   | null;
+  loading:         boolean;
+  login:           (email: string, password: string) => Promise<void>;
+  signup:          (email: string, password: string) => Promise<void>;
+  logout:          () => void;
+  refreshToken:    () => Promise<boolean>;
+  /** Load a session that was obtained out-of-band (e.g. OAuth callback). */
+  hydrateSession:  (accessToken: string, refreshToken: string, user: AuthUser, expiresIn: number) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -193,8 +195,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(timer);
   }, [tokenExpiry, refreshTok, refreshToken]);
 
+  const hydrateSession = useCallback((accessToken: string, refreshTokenStr: string, u: AuthUser, expiresIn: number) => {
+    persist(accessToken, refreshTokenStr, u, expiresIn);
+    setToken(accessToken);
+    setRefreshTok(refreshTokenStr);
+    setUser(u);
+    setTokenExpiry(Math.floor(Date.now() / 1000) + expiresIn);
+    setLoading(false);
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, signup, logout, refreshToken }}>
+    <AuthContext.Provider value={{ user, token, loading, login, signup, logout, refreshToken, hydrateSession }}>
       {children}
     </AuthContext.Provider>
   );

@@ -7,6 +7,9 @@ import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
 import { Eye, EyeOff } from 'lucide-react';
 import { fadeUp, staggerContainer } from '@/lib/variants';
+import { getSupabaseBrowser, isOAuthConfigured } from '@/lib/supabase-client';
+
+const EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -28,6 +31,10 @@ export default function RegisterPage() {
     setError(null);
     setNotice(null);
 
+    if (!EMAIL_RE.test(email.trim())) {
+      setError('Please enter a valid email address.');
+      return;
+    }
     if (password.length < 6) {
       setError('Password must be at least 6 characters.');
       return;
@@ -180,6 +187,37 @@ export default function RegisterPage() {
                 </span>
               ) : 'Create Account'}
             </motion.button>
+
+            {isOAuthConfigured() && (
+              <>
+                <div className="flex items-center gap-3 my-1">
+                  <span className="flex-1 h-px bg-black/10" />
+                  <span className="text-[10px] font-semibold tracking-widest uppercase text-text-mid">or</span>
+                  <span className="flex-1 h-px bg-black/10" />
+                </div>
+                <button type="button"
+                  onClick={async () => {
+                    setError(null);
+                    const supabase = getSupabaseBrowser();
+                    if (!supabase) { setError('Google sign-in is not configured.'); return; }
+                    setLoading(true);
+                    const { error } = await supabase.auth.signInWithOAuth({
+                      provider: 'google',
+                      options:  { redirectTo: `${window.location.origin}/auth/callback` },
+                    });
+                    if (error) { setError(error.message); setLoading(false); }
+                  }}
+                  disabled={loading}
+                  className="w-full py-3 rounded-2xl font-dm-sans font-semibold text-sm flex items-center justify-center gap-3 bg-white text-text-dark disabled:opacity-50"
+                  style={{ border: '1px solid rgba(0,0,0,0.10)' }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden>
+                    <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.2 1.4-1.7 4.1-5.5 4.1-3.3 0-6-2.7-6-6.1s2.7-6.1 6-6.1c1.9 0 3.2.8 3.9 1.5l2.7-2.6C17 3.3 14.7 2.2 12 2.2 6.6 2.2 2.2 6.6 2.2 12s4.4 9.8 9.8 9.8c5.7 0 9.4-4 9.4-9.6 0-.6-.1-1.1-.2-1.6H12z" />
+                  </svg>
+                  Continue with Google
+                </button>
+              </>
+            )}
           </form>
 
           <p className="text-center font-dm-sans text-sm text-text-soft mt-6">

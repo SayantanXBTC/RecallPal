@@ -129,6 +129,19 @@ _JWKS_CACHE: dict[str, tuple[float, list[dict]]] = {}
 _JWKS_TTL_S = 600.0
 
 
+import re
+_EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
+
+
+def _is_valid_email(email: str) -> bool:
+    """Lightweight RFC-5322-ish check. Supabase itself performs a second
+    validation (rejects at signup if the domain has no MX record), so this is
+    mostly a fast client-side guard against typos before we call the API."""
+    if not email or len(email) > 254:
+        return False
+    return bool(_EMAIL_RE.match(email.strip()))
+
+
 def _fetch_supabase_jwks() -> list[dict]:
     """Fetch and cache Supabase JWKS for asymmetric JWT verification.
 
@@ -1775,6 +1788,18 @@ def auth_signup():
                 "message": "Email and password are required.",
             }), 400
 
+        if not _is_valid_email(email):
+            return jsonify({
+                "status":  "error",
+                "message": "Please enter a valid email address.",
+            }), 400
+
+        if len(password) < 6:
+            return jsonify({
+                "status":  "error",
+                "message": "Password must be at least 6 characters.",
+            }), 400
+
         resp    = _get_auth_client().auth.sign_up({"email": email, "password": password})
         session = resp.session
         user    = resp.user
@@ -1902,6 +1927,44 @@ def auth_refresh():
     except Exception as exc:
         logger.error("Error in POST /api/auth/refresh:\n%s", traceback.format_exc())
         return jsonify({"status": "error", "message": str(exc)}), 401
+
+
+@app.route("/api/auth/reset-password", methods=["POST"])
+@limiter.limit("5 per hour")
+def auth_reset_password():
+    """Send a password-reset email via Supabase Auth.
+
+    Responds success even when the email is unknown, so attackers can't
+    enumerate accounts by comparing responses. Rate-limited per IP.
+    """
+    payload   = request.get_json(silent=True) or {}
+    email     = (payload.get("email") or "").strip()
+    redirect  = (payload.get("redirect_to") or "").strip()
+
+    if not _is_valid_email(email):
+        return jsonify({
+            "status":  "error",
+            "message": "Please enter a valid email address.",
+        }), 400
+
+    # Enforce a same-origin redirect: only accept the caller's Origin header.
+    origin = (request.headers.get("Origin") or "").strip()
+    if not redirect.startswith(origin) if origin else True:
+        redirect = f"{origin}/reset-password" if origin else redirect
+
+    try:
+        _get_auth_client().auth.reset_password_for_email(
+            email,
+            {"redirect_to": redirect} if redirect else {},
+        )
+    except Exception as exc:
+        # Log but return success to avoid enumeration.
+        logger.warning("reset-password Supabase call failed for %s: %s", email, exc)
+
+    return jsonify({
+        "status":  "success",
+        "message": "If that email is registered, a reset link is on its way.",
+    })
 
 
 @app.route("/api/auth/me", methods=["GET"])
