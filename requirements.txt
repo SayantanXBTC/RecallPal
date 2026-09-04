@@ -1,8 +1,6 @@
 flask
 flask-cors
 flask-limiter
-deepface
-tensorflow
 opencv-python-headless
 onnxruntime
 insightface

@@ -1392,8 +1392,8 @@ def debug_face():
     import base64 as _b64
     import numpy as _np
     import cv2 as _cv2
-    from face_engine import _FACE_CASCADE, _crop_largest_face
-    from deepface import DeepFace as _DeepFace
+    from face_engine import _FACE_CASCADE, _crop_largest_face, _analyze_frame, _get_face_app
+    from inference_client import is_remote_enabled as _inf_remote, analyze_frame as _inf_analyze
 
     results: dict = {}
     try:
@@ -1418,7 +1418,7 @@ def debug_face():
         if frame is None:
             return jsonify({"status": "ok", "results": results})
 
-        # Step 2 — grayscale
+        # Step 2 — grayscale (legacy Haar sanity check)
         try:
             gray = _cv2.cvtColor(frame, _cv2.COLOR_BGR2GRAY)
             results["step2_grayscale"] = f"OK shape={gray.shape}"
@@ -1426,51 +1426,44 @@ def debug_face():
             results["step2_grayscale"] = f"FAIL: {exc}"
             return jsonify({"status": "ok", "results": results})
 
-        # Step 3 — cascade with three parameter sets
-        for label, kw in (
-            ("strict  scaleFactor=1.10 minNeighbors=5 minSize=60", dict(scaleFactor=1.10, minNeighbors=5, minSize=(60, 60))),
-            ("loose   scaleFactor=1.05 minNeighbors=3 minSize=40", dict(scaleFactor=1.05, minNeighbors=3, minSize=(40, 40))),
-            ("equalised scaleFactor=1.03 minNeighbors=2 minSize=30", None),
-        ):
-            try:
-                src = _cv2.equalizeHist(gray) if "equalised" in label else gray
-                if kw is None:
-                    kw = dict(scaleFactor=1.03, minNeighbors=2, minSize=(30, 30))
-                faces = _FACE_CASCADE.detectMultiScale(src, **kw)
-                results[f"step3_cascade_{label[:6].strip()}"] = (
-                    f"faces={len(faces)}, raw={faces.tolist() if len(faces) > 0 else []}"
-                )
-            except Exception as exc:
-                results[f"step3_cascade_{label[:6].strip()}"] = f"FAIL: {exc}"
+        # Step 3 — legacy Haar detection (fallback path)
+        try:
+            faces = _FACE_CASCADE.detectMultiScale(
+                _cv2.equalizeHist(gray), scaleFactor=1.05, minNeighbors=3, minSize=(40, 40),
+            )
+            results["step3_haar_fallback"] = f"faces={len(faces)}"
+        except Exception as exc:
+            results["step3_haar_fallback"] = f"FAIL: {exc}"
 
-        # Step 4 — crop helper
-        crop = None
+        # Step 4 — legacy crop helper
         try:
             crop = _crop_largest_face(frame)
-            results["step4_crop"] = "FAIL: returned None" if crop is None else f"OK shape={crop.shape}"
+            results["step4_haar_crop"] = "FAIL: returned None" if crop is None else f"OK shape={crop.shape}"
         except Exception as exc:
-            results["step4_crop"] = f"FAIL: {exc}"
+            results["step4_haar_crop"] = f"FAIL: {exc}"
 
-        # Step 5 — DeepFace on full frame
-        for model in ("ArcFace", "Facenet512"):
+        # Step 5 — insightface in-process (RetinaFace + ArcFace r100)
+        try:
+            app_ok = _get_face_app() is not None
+            results["step5_insightface_loaded"] = "OK" if app_ok else "FAIL: FaceAnalysis returned None"
+            local_faces = _analyze_frame(frame)
+            results["step5_insightface_local"] = (
+                f"faces={len(local_faces)}"
+                + (f" first_bbox={local_faces[0]['bbox']} emb_len={local_faces[0]['embedding'].size}"
+                   if local_faces else "")
+            )
+        except Exception as exc:
+            results["step5_insightface_local"] = f"FAIL: {exc}"
+
+        # Step 6 — remote inference microservice (if configured)
+        if _inf_remote():
             try:
-                r   = _DeepFace.represent(img_path=frame, model_name=model, enforce_detection=False, detector_backend="opencv")
-                emb = r[0]["embedding"]
-                results[f"step5_deepface_full_{model}"] = f"OK embedding_len={len(emb)}"
+                remote_faces = _inf_analyze(frame)
+                results["step6_inference_remote"] = f"faces={len(remote_faces)}"
             except Exception as exc:
-                results[f"step5_deepface_full_{model}"] = f"FAIL: {exc}"
-
-        # Step 6 — DeepFace on crop
-        if crop is not None:
-            for model in ("ArcFace", "Facenet512"):
-                try:
-                    r   = _DeepFace.represent(img_path=crop, model_name=model, enforce_detection=False, detector_backend="opencv")
-                    emb = r[0]["embedding"]
-                    results[f"step6_deepface_crop_{model}"] = f"OK embedding_len={len(emb)}"
-                except Exception as exc:
-                    results[f"step6_deepface_crop_{model}"] = f"FAIL: {exc}"
+                results["step6_inference_remote"] = f"FAIL: {exc}"
         else:
-            results["step6_deepface_crop"] = "SKIP: no crop available"
+            results["step6_inference_remote"] = "SKIP: INFERENCE_URL not set"
 
         return jsonify({"status": "ok", "results": results})
 
