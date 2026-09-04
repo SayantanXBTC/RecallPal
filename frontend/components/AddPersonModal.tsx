@@ -65,6 +65,8 @@ export default function AddPersonModal({ isOpen, onClose, onSuccess }: AddPerson
   const [photos,     setPhotos]     = useState<string[]>([]);
   const [saving,     setSaving]     = useState(false);
   const [saveError,  setSaveError]  = useState<string | null>(null);
+  const [consent,    setConsent]    = useState(false);
+  const [granter,    setGranter]    = useState('');
   const [camReady,   setCamReady]   = useState(false);
   const [camError,   setCamError]   = useState<string | null>(null);
   const [flash,      setFlash]      = useState(false);
@@ -117,6 +119,8 @@ export default function AddPersonModal({ isOpen, onClose, onSuccess }: AddPerson
       setPhotos([]);
       setSaving(false);
       setSaveError(null);
+      setConsent(false);
+      setGranter('');
     }
   }, [isOpen]);
 
@@ -183,6 +187,14 @@ export default function AddPersonModal({ isOpen, onClose, onSuccess }: AddPerson
       setSaveError(`Capture at least ${MIN_PHOTOS} photos (${photos.length}/${MIN_PHOTOS} so far).`);
       return;
     }
+    if (!consent) {
+      setSaveError('Please confirm biometric consent below before saving.');
+      return;
+    }
+    if (!granter.trim()) {
+      setSaveError('Please enter the name of the person granting consent.');
+      return;
+    }
 
     setSaving(true);
     try {
@@ -200,6 +212,11 @@ export default function AddPersonModal({ isOpen, onClose, onSuccess }: AddPerson
           age:      Number.isFinite(parsedAge) && parsedAge! > 0 ? parsedAge : null,
           likes,
           images:   photos,
+          consent: {
+            accepted:         true,
+            granter_name:     granter.trim(),
+            granter_relation: relation,
+          },
         }),
       });
 
@@ -233,7 +250,8 @@ export default function AddPersonModal({ isOpen, onClose, onSuccess }: AddPerson
   // ─── Derived state ────────────────────────────────────────────────────────
 
   const nameValid  = name.trim().length >= 2;
-  const canSave    = nameValid && !!relation && photos.length >= MIN_PHOTOS && !saving;
+  const canSave    = nameValid && !!relation && photos.length >= MIN_PHOTOS
+                     && consent && !!granter.trim() && !saving;
   const photoPct   = Math.min(100, (photos.length / MAX_PHOTOS) * 100);
   const photoReady = photos.length >= MIN_PHOTOS;
 
@@ -545,6 +563,38 @@ export default function AddPersonModal({ isOpen, onClose, onSuccess }: AddPerson
                 rows={3}
                 className="glass-input w-full rounded-xl px-4 py-2.5 text-sm resize-none"
               />
+            </div>
+
+            {/* Biometric consent (GDPR Art. 9) */}
+            <div className="glass rounded-xl px-4 py-3 space-y-3">
+              <label className="flex items-start gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={consent}
+                  onChange={(e) => setConsent(e.target.checked)}
+                  className="mt-1 shrink-0 accent-teal-400"
+                />
+                <span className="text-xs text-white/70 leading-relaxed">
+                  I confirm the person named above (or their legal guardian) has
+                  given informed consent to store and process their face
+                  biometric data for the purpose of recognition assistance.
+                </span>
+              </label>
+              {consent && (
+                <div>
+                  <label htmlFor="granter-name" className="block text-[11px] uppercase tracking-wider text-white/45 mb-1">
+                    Consent given by
+                  </label>
+                  <input
+                    id="granter-name"
+                    type="text"
+                    value={granter}
+                    onChange={(e) => setGranter(e.target.value)}
+                    placeholder="Name of person or guardian granting consent"
+                    className="glass-input w-full rounded-xl px-4 py-2 text-sm"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Inline save error */}

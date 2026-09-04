@@ -769,18 +769,30 @@ def add_person():
         )
 
         # Consent gate (GDPR Art. 9). Enrolling biometric data without an
-        # active opt-in is a compliance breach. The client must call
-        # POST /api/consent before /api/add-person for the same subject.
-        from consent import has_active_consent, audit as _audit
+        # active opt-in is a compliance breach. Two paths:
+        #   1. Consent already granted via POST /api/consent — proceed.
+        #   2. Client sends { consent: { accepted, granter_name, granter_relation } }
+        #      in this request — grant it inline, then proceed.
+        from consent import has_active_consent, grant_consent, audit as _audit
         if not has_active_consent(user_id, name):
-            return jsonify({
-                "status":  "error",
-                "code":    "consent_required",
-                "message": (
-                    f"No active biometric consent found for '{name}'. "
-                    "Call POST /api/consent with the granter's name and relation first."
-                ),
-            }), 403
+            inline = payload.get("consent") or {}
+            if isinstance(inline, dict) and inline.get("accepted"):
+                grant_consent(
+                    user_id,
+                    subject_name     = name,
+                    granter_name     = (inline.get("granter_name")     or relation or name).strip(),
+                    granter_relation = (inline.get("granter_relation") or relation).strip(),
+                )
+            else:
+                return jsonify({
+                    "status":  "error",
+                    "code":    "consent_required",
+                    "message": (
+                        f"Biometric consent required for '{name}'. Include "
+                        "consent: {{accepted:true, granter_name, granter_relation}} "
+                        "in the request body or call POST /api/consent first."
+                    ),
+                }), 403
 
         # Optional async path: when the caller sets ?async=true or the
         # X-Async: 1 header AND Redis is configured, dispatch to the RQ
