@@ -284,7 +284,38 @@ function reconcileTracks(prev: TrackedFace[], next: FaceResult[], nextId: { v: n
       out.push({ ...prev[pi], missedTicks: prev[pi].missedTicks + 1 });
     }
   }
-  return collapseOverlappingTracks(out);
+  return collapseByName(collapseOverlappingTracks(out));
+}
+
+/** Hard rule: never show two cards with the same recognized name. If
+ *  the tracker ended up with duplicates (rare, but still possible when
+ *  overlap heuristics don't collapse them), keep the freshest one and
+ *  drop the rest. Unknowns are left alone — genuinely different unknown
+ *  people can and should show separate cards. */
+function collapseByName(tracks: TrackedFace[]): TrackedFace[] {
+  const seenByName = new Map<string, number>();  // name -> index in kept
+  const kept: TrackedFace[] = [];
+  for (const t of tracks) {
+    const name = (t.status === 'recognized' && t.name) ? t.name.toLowerCase() : null;
+    if (!name) { kept.push(t); continue; }
+    const existingIdx = seenByName.get(name);
+    if (existingIdx === undefined) {
+      seenByName.set(name, kept.length);
+      kept.push(t);
+      continue;
+    }
+    // Prefer the fresher (lower missedTicks) copy; break ties by lower trackId.
+    const existing = kept[existingIdx];
+    const em = existing.missedTicks ?? 0;
+    const tm = t.missedTicks ?? 0;
+    const winner = tm < em || (tm === em && t.trackId < existing.trackId) ? t : existing;
+    kept[existingIdx] = {
+      ...winner,
+      trackId:     Math.min(existing.trackId, t.trackId),
+      missedTicks: Math.min(em, tm),
+    };
+  }
+  return kept;
 }
 
 /** After reconcile, if two tracks describe the same face (either large

@@ -45,16 +45,28 @@ export default function VisitHistory({ refreshTrigger = 0 }: VisitHistoryProps) 
       fetch('/api/events?limit=50', {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
-        .then((r) => r.json())
-        .then((d) => { if (!cancelled) setEvents(d.events ?? []); })
-        .catch(() => { if (!cancelled) setEvents([]); })
+        .then(async (r) => {
+          const body = await r.json().catch(() => ({}));
+          if (!r.ok) console.warn('[visits] /api/events', r.status, body);
+          return body;
+        })
+        .then((d) => {
+          if (!cancelled) {
+            const list = Array.isArray(d?.events) ? d.events : [];
+            setEvents(list);
+          }
+        })
+        .catch((err) => {
+          console.warn('[visits] fetch error', err);
+          if (!cancelled) setEvents([]);
+        })
         .finally(() => { if (!cancelled) setLoading(false); });
     };
     setLoading(true);
     load();
-    // Refresh every 15s so newly recorded visits appear without the
-    // caregiver having to add/delete a person to bump refreshTrigger.
-    const timer = setInterval(load, 15_000);
+    // Refresh every 8s so newly recorded visits appear without the
+    // caregiver having to bump the refresh trigger by other means.
+    const timer = setInterval(load, 8_000);
     return () => { cancelled = true; clearInterval(timer); };
   }, [refreshTrigger, token]);
 

@@ -25,6 +25,17 @@ function partOfDay(iso: string | null): string {
   } catch { return ''; }
 }
 
+/** "10:31 am" — friendly clock time, lowercase, no leading zero on hour. */
+function clockTime(iso: string | null): string {
+  if (!iso) return '';
+  try {
+    return new Date(iso)
+      .toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true })
+      .toLowerCase()
+      .replace(/\s+/g, ' ');
+  } catch { return ''; }
+}
+
 /** "once", "twice", "three times", "four times", "many times" — human count. */
 function timesPhrase(n: number): string {
   if (n <= 1) return 'once';
@@ -45,12 +56,17 @@ function VisitorCard({ entry, dark }: { entry: VisitorSummaryEntry; dark: boolea
   const textSoft   = dark ? '#8A7D72' : '#6B5C52';
   const initial    = capName[0] || '?';
 
-  const first = partOfDay(entry.first_seen);
-  const last  = partOfDay(entry.last_seen);
-  const same  = first === last;
-  const seenLine = same
-    ? `They came by ${first}.`
-    : `First seen ${first}, still around ${last}.`;
+  const firstWord = partOfDay(entry.first_seen);
+  const lastWord  = partOfDay(entry.last_seen);
+  const firstClk  = clockTime(entry.first_seen);
+  const lastClk   = clockTime(entry.last_seen);
+  const single    = entry.first_seen === entry.last_seen || firstClk === lastClk;
+
+  // "…from 10:31 am until 10:29 pm" — anchor the sentence in a real
+  // time window so the reader can place the visit in their day.
+  const seenLine = single
+    ? `They came by ${firstWord} at ${firstClk}.`
+    : `First seen ${firstWord} at ${firstClk}, and again ${lastWord} at ${lastClk}.`;
 
   return (
     <motion.article
