@@ -10,6 +10,7 @@ import AddPhotosModal from '@/components/AddPhotosModal';
 import PeopleSidebar  from '@/components/PeopleSidebar';
 import Avatar         from '@/components/Avatar';
 import { useAssistant } from '@/lib/assistant-context';
+import { getPreferredVoice, cancelSpeech } from '@/lib/tts';
 import { MultiRecognitionResult } from '@/lib/types';
 import { useTheme } from '@/lib/theme-context';
 import AlertBanner from '@/components/AlertBanner';
@@ -50,7 +51,9 @@ export default function DashboardPage() {
     if (!text) { speakingRef.current = false; return; }
     speakingRef.current = true;
     const u = new SpeechSynthesisUtterance(text);
-    u.rate = 0.92; u.pitch = 1.0; u.volume = 1.0;
+    const v = getPreferredVoice();
+    if (v) u.voice = v;
+    u.rate = 0.95; u.pitch = 1.05; u.volume = 1.0;
     u.onend = () => { speakingRef.current = false; speakNext(); };
     u.onerror = () => { speakingRef.current = false; speakNext(); };
     window.speechSynthesis.speak(u);
@@ -85,7 +88,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (isMuted && typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
+      cancelSpeech();
       spokenQueueRef.current = [];
       speakingRef.current = false;
     }

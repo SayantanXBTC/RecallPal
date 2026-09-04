@@ -56,6 +56,7 @@ function sanitizeForSpeech(text: string): string {
 }
 import { useAuth } from '@/lib/auth-context';
 import { useAssistant } from '@/lib/assistant-context';
+import { cancelSpeech, speakWithFemaleVoice } from '@/lib/tts';
 
 interface ChatMsg { role: 'user' | 'assistant'; content: string; }
 
@@ -64,13 +65,7 @@ const GREETING: ChatMsg = {
   content: `Hello, I am ${ASSISTANT_NAME}. I am here to help. Would you like to save someone new, or see who visited today?`,
 };
 
-/** Cancel any speech in flight and drop everything the browser has
- *  queued. Used when the user mutes or closes the panel. */
-function stopSpeech() {
-  if (typeof window === 'undefined') return;
-  if (!('speechSynthesis' in window)) return;
-  try { window.speechSynthesis.cancel(); } catch { /* no-op */ }
-}
+const stopSpeech = cancelSpeech;
 
 export default function AssistantPanel() {
   const { token } = useAuth();
@@ -107,15 +102,10 @@ export default function AssistantPanel() {
 
   const speak = useCallback((text: string) => {
     if (muted) return;
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
     const cleaned = sanitizeForSpeech(text);
     if (!cleaned) return;
-    try {
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(cleaned);
-      u.rate = 0.95; u.pitch = 1.0; u.volume = 1.0;
-      window.speechSynthesis.speak(u);
-    } catch { /* no-op */ }
+    cancelSpeech();
+    speakWithFemaleVoice(cleaned, { rate: 0.95, pitch: 1.05 });
   }, [muted]);
 
   // Killswitch: mute or closing the panel drops queued speech.
