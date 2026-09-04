@@ -1,9 +1,17 @@
+export interface ConversationSnippet {
+  id?:         string;
+  transcript:  string;
+  topics?:     string[];
+  spoken_at:   string;
+}
+
 export interface RecognitionMemory {
-  relation: string;
-  notes: string;
-  last_seen: string;
-  age: number | null;
-  likes: string[];
+  relation:              string;
+  notes:                 string;
+  last_seen:             string;
+  age:                   number | null;
+  likes:                 string[];
+  recent_conversations?: ConversationSnippet[];
 }
 
 export interface RecognitionResult {

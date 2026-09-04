@@ -620,25 +620,25 @@ export default function CameraPanel({ onRecognition, currentResult, onAddRequest
                       </div>
                     )}
 
-                    {/* Likes */}
-                    {face.memory?.likes && face.memory.likes.length > 0 && (
+                    {/* Recent conversations */}
+                    {face.memory?.recent_conversations && face.memory.recent_conversations.length > 0 && (
                       <div>
                         <div style={{ color: 'rgba(245,239,232,0.35)', fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>
-                          Likes
+                          Last time you spoke
                         </div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                          {face.memory.likes.map((like, li) => (
-                            <span key={li} style={{
-                              background: 'rgba(201,148,58,0.14)',
-                              border: '1px solid rgba(201,148,58,0.30)',
-                              borderRadius: 10,
-                              padding: '2px 7px',
-                              color: '#F0C97A',
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                          {face.memory.recent_conversations.slice(0, 2).map((c, ci) => (
+                            <p key={c.id ?? ci} style={{
+                              color: 'rgba(245,239,232,0.72)',
                               fontSize: 10,
-                              fontWeight: 500,
+                              lineHeight: 1.4,
+                              margin: 0,
                             }}>
-                              {like}
-                            </span>
+                              <span style={{ color: '#F0C97A', fontWeight: 600 }}>
+                                {formatLastSeen(c.spoken_at)}:
+                              </span>{' '}
+                              &ldquo;{c.transcript.slice(0, 90)}{c.transcript.length > 90 ? '…' : ''}&rdquo;
+                            </p>
                           ))}
                         </div>
                       </div>
