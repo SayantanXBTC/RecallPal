@@ -157,7 +157,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body:    JSON.stringify({ refresh_token: storedRefresh }),
       });
       const data = await res.json();
-      if (!res.ok || data.status !== 'success') return false;
+      if (!res.ok || data.status !== 'success') {
+        // Refresh token itself is dead — wipe local state and force re-login.
+        clear();
+        setUser(null);
+        setToken(null);
+        setRefreshTok(null);
+        setTokenExpiry(null);
+        if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+          window.location.href = '/login';
+        }
+        return false;
+      }
       const currentUser = user;
       if (!currentUser) return false;
       persist(data.access_token, data.refresh_token, currentUser, data.expires_in);
