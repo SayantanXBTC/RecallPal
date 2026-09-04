@@ -142,7 +142,9 @@ function iou(a: NonNullable<FaceResult['bbox']>, b: NonNullable<FaceResult['bbox
 
 const IOU_MATCH_THRESHOLD    = 0.12;  // lenient — head can move a lot in 700ms
 const CENTER_DIST_RATIO      = 0.55;  // fallback: same face if centres close
-const IOU_DEDUP_THRESHOLD    = 0.55;  // collapse duplicate detections of same face
+const IOU_DEDUP_THRESHOLD    = 0.40;  // collapse duplicate detections of same face
+const IOU_TRACK_MERGE        = 0.35;  // merge overlapping tracks after reconcile
+const CENTER_TRACK_MERGE     = 0.55;  // + centre-distance based track merge
 const MAX_MISSED_TICKS       = 4;     // drop tracks after ~3s of no match
 const STICKY_UNKNOWN_TICKS   = 5;     // hold last name through this many unknown ticks
 
@@ -238,7 +240,49 @@ function reconcileTracks(prev: TrackedFace[], next: FaceResult[], nextId: { v: n
       out.push({ ...prev[pi], missedTicks: prev[pi].missedTicks + 1 });
     }
   }
-  return out;
+  return collapseOverlappingTracks(out);
+}
+
+/** After reconcile, if two tracks describe the same face (either large
+ *  IoU or very close centres) merge them into one. Prefer the older
+ *  trackId and the recognized identity. Fixes the twin-card artefact
+ *  when a stale track sits under sticky-recognition budget while a new
+ *  detection at a slightly different bbox spawns a second track. */
+function collapseOverlappingTracks(tracks: TrackedFace[]): TrackedFace[] {
+  if (tracks.length < 2) return tracks;
+  const kept: TrackedFace[] = [];
+  for (const t of tracks) {
+    if (!t.bbox) { kept.push(t); continue; }
+    let mergedInto = -1;
+    for (let i = 0; i < kept.length; i++) {
+      const k = kept[i];
+      if (!k.bbox) continue;
+      const overlap =
+        iou(k.bbox, t.bbox) >= IOU_TRACK_MERGE ||
+        centerScore(k.bbox, t.bbox) <= CENTER_TRACK_MERGE;
+      if (overlap) { mergedInto = i; break; }
+    }
+    if (mergedInto < 0) { kept.push(t); continue; }
+    const a = kept[mergedInto];
+    const b = t;
+    // Prefer recognized identity; then the fresher (lower missedTicks)
+    // detection; then the older (smaller) trackId so the React key
+    // survives frame-to-frame.
+    const aRec = a.status === 'recognized' && !!a.name;
+    const bRec = b.status === 'recognized' && !!b.name;
+    const chosen = aRec && !bRec ? a
+                 : bRec && !aRec ? b
+                 : (a.missedTicks ?? 0) <= (b.missedTicks ?? 0) ? a : b;
+    const other  = chosen === a ? b : a;
+    kept[mergedInto] = {
+      ...chosen,
+      trackId:     Math.min(a.trackId, b.trackId),
+      // Use the freshest bbox available.
+      bbox:        (other.missedTicks ?? 0) < (chosen.missedTicks ?? 0) ? other.bbox : chosen.bbox,
+      missedTicks: Math.min(a.missedTicks, b.missedTicks),
+    };
+  }
+  return kept;
 }
 
 /** Merge an incoming detection into an existing track, preserving the
