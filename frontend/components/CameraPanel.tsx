@@ -120,6 +120,66 @@ function FaceCard({ face }: { face: FaceResult }) {
   );
 }
 
+// ─── IoU face tracking ───────────────────────────────────────────────────────
+// Assigns a stable numeric ID to each detected face across frames so the
+// overlay React key stays constant and each card follows its own face rather
+// than reshuffling when detection order changes.
+type TrackedFace = FaceResult & { trackId: number; missedTicks: number };
+
+function iou(a: NonNullable<FaceResult['bbox']>, b: NonNullable<FaceResult['bbox']>): number {
+  const ax2 = a.x + a.w, ay2 = a.y + a.h;
+  const bx2 = b.x + b.w, by2 = b.y + b.h;
+  const ix1 = Math.max(a.x, b.x), iy1 = Math.max(a.y, b.y);
+  const ix2 = Math.min(ax2, bx2), iy2 = Math.min(ay2, by2);
+  const iw  = Math.max(0, ix2 - ix1);
+  const ih  = Math.max(0, iy2 - iy1);
+  const inter = iw * ih;
+  if (inter <= 0) return 0;
+  const union = a.w * a.h + b.w * b.h - inter;
+  return union > 0 ? inter / union : 0;
+}
+
+const IOU_MATCH_THRESHOLD = 0.25;
+const MAX_MISSED_TICKS    = 3;   // drop tracks after ~2s of no match
+
+function reconcileTracks(prev: TrackedFace[], next: FaceResult[], nextId: { v: number }): TrackedFace[] {
+  const usedPrev = new Set<number>();
+  const usedNext = new Set<number>();
+  const out: TrackedFace[] = [];
+
+  // Greedy IoU matching: pick best pair, repeat.
+  const pairs: { p: number; n: number; score: number }[] = [];
+  for (let pi = 0; pi < prev.length; pi++) {
+    const pb = prev[pi].bbox;
+    if (!pb) continue;
+    for (let ni = 0; ni < next.length; ni++) {
+      const nb = next[ni].bbox;
+      if (!nb) continue;
+      const s = iou(pb, nb);
+      if (s >= IOU_MATCH_THRESHOLD) pairs.push({ p: pi, n: ni, score: s });
+    }
+  }
+  pairs.sort((a, b) => b.score - a.score);
+  for (const { p, n } of pairs) {
+    if (usedPrev.has(p) || usedNext.has(n)) continue;
+    usedPrev.add(p); usedNext.add(n);
+    out.push({ ...next[n], trackId: prev[p].trackId, missedTicks: 0 });
+  }
+  // New tracks for unmatched detections.
+  for (let ni = 0; ni < next.length; ni++) {
+    if (usedNext.has(ni)) continue;
+    out.push({ ...next[ni], trackId: nextId.v++, missedTicks: 0 });
+  }
+  // Keep stale tracks briefly (helps card not flicker between frames).
+  for (let pi = 0; pi < prev.length; pi++) {
+    if (usedPrev.has(pi)) continue;
+    if (prev[pi].missedTicks + 1 <= MAX_MISSED_TICKS) {
+      out.push({ ...prev[pi], missedTicks: prev[pi].missedTicks + 1 });
+    }
+  }
+  return out;
+}
+
 export default function CameraPanel({ onRecognition, currentResult, onAddRequest }: CameraPanelProps) {
   const { theme } = useTheme();
   const { token } = useAuth();
@@ -136,24 +196,12 @@ export default function CameraPanel({ onRecognition, currentResult, onAddRequest
   const [isScanning, setIsScanning] = useState(false);
   const [camError,   setCamError]   = useState<string | null>(null);
 
-  // Display faces updated directly from API response — no prop round-trip
-  const [displayFaces, setDisplayFaces] = useState<FaceResult[]>([]);
-  const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Stable, tracked faces (survive across frames via IoU matching).
+  const [displayFaces, setDisplayFaces] = useState<TrackedFace[]>([]);
+  const nextTrackIdRef = useRef({ v: 1 });
+  const clearTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const updateDisplayFaces = useCallback((data: MultiRecognitionResult) => {
-    const faces = (data.faces ?? []);
-    if (faces.length > 0) {
-      if (clearTimerRef.current) { clearTimeout(clearTimerRef.current); clearTimerRef.current = null; }
-      setDisplayFaces(faces);
-    } else {
-      if (!clearTimerRef.current) {
-        clearTimerRef.current = setTimeout(() => {
-          clearTimerRef.current = null;
-          setDisplayFaces([]);
-        }, 2000);
-      }
-    }
-  }, []);
+  // Aging tracks handled inline in captureAndRecognize via reconcileTracks.
 
   useEffect(() => () => { if (clearTimerRef.current) clearTimeout(clearTimerRef.current); }, []);
 
@@ -216,14 +264,24 @@ export default function CameraPanel({ onRecognition, currentResult, onAddRequest
       });
       if (res.ok) {
         const data = await res.json() as MultiRecognitionResult;
-        onRecognition(data);
-        updateDisplayFaces(data);
+        // updateDisplayFaces synchronously computes the new tracked list; we
+        // read it back via functional setter to pass stable trackIds upstream.
+        setDisplayFaces((prev) => {
+          const merged = reconcileTracks(prev, data.faces ?? [], nextTrackIdRef.current);
+          onRecognition({
+            faces: merged
+              .filter((f) => f.missedTicks === 0)
+              .map(({ missedTicks: _m, ...rest }) => rest as FaceResult),
+          });
+          return merged;
+        });
+        if (clearTimerRef.current) { clearTimeout(clearTimerRef.current); clearTimerRef.current = null; }
       }
     } catch { /* silent */ } finally {
       busyRef.current = false;
       setIsScanning(false);
     }
-  }, [onRecognition, updateDisplayFaces, token]);
+  }, [onRecognition, token]);
 
   useEffect(() => {
     if (isActive) {
@@ -354,7 +412,7 @@ export default function CameraPanel({ onRecognition, currentResult, onAddRequest
             : 'Unknown';
           return (
             <div
-              key={`face-${i}`}
+              key={`face-${face.trackId ?? i}`}
               className="absolute z-30"
               style={{
                 left,

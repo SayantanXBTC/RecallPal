@@ -3,6 +3,7 @@
 import { useRef } from 'react';
 import { motion, useInView } from 'framer-motion';
 import { Users, BookOpen, Bell, ArrowRight, Brain, Heart, Globe } from 'lucide-react';
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { fadeUp, scaleIn, staggerContainer } from '@/lib/variants';
 import { useTheme } from '@/lib/theme-context';
 
@@ -27,30 +28,6 @@ const FEATURE_CARDS = [
     iconColor: '#C9943A',
     title: 'Care Reminders',
     desc: 'Gentle daily reminders that feel warm and personal — not clinical.',
-  },
-];
-
-const DEMENTIA_FACTS = [
-  {
-    icon: <Brain size={24} />,
-    stat: '55M+',
-    label: 'People live with dementia worldwide',
-    color: '#4A90D9',
-    bg: 'rgba(214,233,248,0.5)',
-  },
-  {
-    icon: <Globe size={24} />,
-    stat: '10M',
-    label: 'New cases diagnosed every year',
-    color: '#C9943A',
-    bg: 'rgba(253,223,196,0.5)',
-  },
-  {
-    icon: <Heart size={24} />,
-    stat: '60%',
-    label: 'Of patients lose the ability to recognise loved ones',
-    color: '#D97B8A',
-    bg: 'rgba(253,220,225,0.5)',
   },
 ];
 
@@ -160,23 +137,9 @@ export default function AboutSection() {
             </motion.p>
           </motion.div>
 
-          {/* Stats row */}
-          <motion.div variants={staggerContainer} initial="hidden" animate={factIn ? 'visible' : 'hidden'} className="grid md:grid-cols-3 gap-6 mb-16">
-            {DEMENTIA_FACTS.map((f) => (
-              <motion.div key={f.stat} variants={scaleIn}
-                className="rounded-3xl p-8 text-center shadow-warm-md border"
-                style={{ background: dark ? 'rgba(52,41,24,0.82)' : f.bg, backdropFilter: 'blur(12px)', borderColor: border }}>
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl mb-4"
-                  style={{ background: dark ? iconBgDark : 'white', color: f.color }}>
-                  {f.icon}
-                </div>
-                <p className="font-serif text-4xl font-bold" style={{ color: hColor }}>{f.stat}</p>
-                <p className="font-dm-sans text-sm mt-2 leading-relaxed" style={{ color: bColor }}>{f.label}</p>
-              </motion.div>
-            ))}
-          </motion.div>
-
           {/* Causes & Effects */}
+          <div className="mb-4" />
+
           <motion.div variants={staggerContainer} initial="hidden" animate={factIn ? 'visible' : 'hidden'} className="grid md:grid-cols-2 gap-8">
             {/* Causes */}
             <motion.div variants={scaleIn}

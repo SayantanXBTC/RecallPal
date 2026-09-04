@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/lib/auth-context';
@@ -10,7 +10,11 @@ import { fadeUp, staggerContainer } from '@/lib/variants';
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { signup } = useAuth();
+  const { user, loading: authLoading, signup } = useAuth();
+
+  useEffect(() => {
+    if (!authLoading && user) router.replace('/dashboard');
+  }, [user, authLoading, router]);
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
   const [confirm,  setConfirm]  = useState('');

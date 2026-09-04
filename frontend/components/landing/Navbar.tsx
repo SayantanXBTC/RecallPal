@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, X, Moon, Sun } from 'lucide-react';
 import Link from 'next/link';
 import { useTheme } from '@/lib/theme-context';
+import { useAuth } from '@/lib/auth-context';
 
 const NAV_LINKS = [
   { label: 'About',       href: '#about' },
@@ -15,9 +16,11 @@ const NAV_LINKS = [
 
 export default function Navbar() {
   const { theme, toggleTheme } = useTheme();
+  const { user, loading } = useAuth();
   const [open,     setOpen]     = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const dark = theme === 'dark';
+  const authed = !loading && !!user;
 
   useEffect(() => {
     const fn = () => setScrolled(window.scrollY > 20);
@@ -99,19 +102,30 @@ export default function Navbar() {
             />
           </button>
 
-          <Link href="/login"
-            className="font-dm-sans text-[0.88rem] font-medium px-2 transition-colors duration-200 cursor-pointer"
-            style={{ color: dark ? '#C4B09A' : '#6B5C52' }}>
-            Log In
-          </Link>
-
-          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.97 }}>
-            <Link href="/register"
-              className="font-dm-sans text-sm font-semibold text-white rounded-full px-5 py-2.5 shadow-gold transition-all duration-200"
-              style={{ background: 'linear-gradient(135deg,#C9943A,#F0C97A)' }}>
-              Get Started
-            </Link>
-          </motion.div>
+          {authed ? (
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.97 }}>
+              <Link href="/dashboard"
+                className="font-dm-sans text-sm font-semibold text-white rounded-full px-5 py-2.5 shadow-gold transition-all duration-200"
+                style={{ background: 'linear-gradient(135deg,#C9943A,#F0C97A)' }}>
+                Open Dashboard
+              </Link>
+            </motion.div>
+          ) : (
+            <>
+              <Link href="/login"
+                className="font-dm-sans text-[0.88rem] font-medium px-2 transition-colors duration-200 cursor-pointer"
+                style={{ color: dark ? '#C4B09A' : '#6B5C52' }}>
+                Log In
+              </Link>
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.97 }}>
+                <Link href="/register"
+                  className="font-dm-sans text-sm font-semibold text-white rounded-full px-5 py-2.5 shadow-gold transition-all duration-200"
+                  style={{ background: 'linear-gradient(135deg,#C9943A,#F0C97A)' }}>
+                  Get Started
+                </Link>
+              </motion.div>
+            </>
+          )}
         </div>
 
         {/* Mobile: dark toggle + hamburger */}
@@ -149,15 +163,25 @@ export default function Navbar() {
                 </button>
               ))}
               <div className="flex flex-col gap-2 pt-2 border-t" style={{ borderColor: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)' }}>
-                <Link href="/login" className="text-center font-dm-sans text-sm font-medium py-2.5 rounded-full border transition-all"
-                  style={{ color: dark ? '#C4B09A' : '#6B5C52', borderColor: dark ? 'rgba(201,148,58,0.35)' : 'rgba(0,0,0,0.12)' }}>
-                  Log In
-                </Link>
-                <Link href="/register"
-                  className="text-center font-dm-sans text-sm font-semibold text-white py-2.5 rounded-full shadow-gold"
-                  style={{ background: 'linear-gradient(135deg,#C9943A,#F0C97A)' }}>
-                  Get Started
-                </Link>
+                {authed ? (
+                  <Link href="/dashboard"
+                    className="text-center font-dm-sans text-sm font-semibold text-white py-2.5 rounded-full shadow-gold"
+                    style={{ background: 'linear-gradient(135deg,#C9943A,#F0C97A)' }}>
+                    Open Dashboard
+                  </Link>
+                ) : (
+                  <>
+                    <Link href="/login" className="text-center font-dm-sans text-sm font-medium py-2.5 rounded-full border transition-all"
+                      style={{ color: dark ? '#C4B09A' : '#6B5C52', borderColor: dark ? 'rgba(201,148,58,0.35)' : 'rgba(0,0,0,0.12)' }}>
+                      Log In
+                    </Link>
+                    <Link href="/register"
+                      className="text-center font-dm-sans text-sm font-semibold text-white py-2.5 rounded-full shadow-gold"
+                      style={{ background: 'linear-gradient(135deg,#C9943A,#F0C97A)' }}>
+                      Get Started
+                    </Link>
+                  </>
+                )}
               </div>
             </div>
           </motion.div>

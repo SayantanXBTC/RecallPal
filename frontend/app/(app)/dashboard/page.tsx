@@ -24,33 +24,63 @@ export default function DashboardPage() {
   const [isMuted,       setIsMuted]       = useState(false);
   const [refreshPeople, setRefreshPeople] = useState(0);
 
-  const lastSpokenRef = useRef<string | null>(null);
+  // Set of trackIds we've already announced this session so a face that
+  // stays on screen doesn't get re-announced every recognition tick.
+  const spokenIdsRef = useRef<Set<number>>(new Set());
+  const spokenQueueRef = useRef<string[]>([]);
+  const speakingRef = useRef(false);
 
-  // ─── Voice output ──────────────────────────────────────────────────────────
+  // ─── Voice output — per-person announcement queue ──────────────────────────
+
+  const speakNext = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    if (!('speechSynthesis' in window)) return;
+    if (isMuted) { spokenQueueRef.current = []; speakingRef.current = false; return; }
+    if (speakingRef.current) return;
+    const text = spokenQueueRef.current.shift();
+    if (!text) { speakingRef.current = false; return; }
+    speakingRef.current = true;
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 0.92; u.pitch = 1.0; u.volume = 1.0;
+    u.onend = () => { speakingRef.current = false; speakNext(); };
+    u.onerror = () => { speakingRef.current = false; speakNext(); };
+    window.speechSynthesis.speak(u);
+  }, [isMuted]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const recognized = (result.faces ?? []).filter(f => f.status === 'recognized' && f.name);
-    if (recognized.length === 0) {
-      lastSpokenRef.current = null;
-      return;
+    const faces = result.faces ?? [];
+    const currentIds = new Set(
+      faces
+        .filter(f => f.status === 'recognized' && f.name && typeof f.trackId === 'number')
+        .map(f => f.trackId as number),
+    );
+    // Forget faces that have left frame so they can be re-announced next visit.
+    for (const id of Array.from(spokenIdsRef.current)) {
+      if (!currentIds.has(id)) spokenIdsRef.current.delete(id);
     }
-    // Speak all newly recognized names as a joined phrase
-    const names = recognized.map(f => f.name!).sort().join(', ');
-    if (names !== lastSpokenRef.current) {
-      lastSpokenRef.current = names;
-      if (!isMuted && 'speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-        const text = recognized.length === 1
-          ? `This is ${recognized[0].name}. They are your ${recognized[0].memory?.relation ?? 'person'}.`
-          : `You can see ${names}.`;
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate  = 0.88;
-        utterance.pitch = 1.0;
-        window.speechSynthesis.speak(utterance);
-      }
+    // Queue announcements for newly recognized faces this frame.
+    for (const face of faces) {
+      const tid = face.trackId;
+      if (face.status !== 'recognized' || !face.name || typeof tid !== 'number') continue;
+      if (spokenIdsRef.current.has(tid)) continue;
+      spokenIdsRef.current.add(tid);
+      const relation = face.memory?.relation?.trim();
+      const line = relation
+        ? `This is ${face.name}, your ${relation}.`
+        : `This is ${face.name}.`;
+      spokenQueueRef.current.push(line);
     }
-  }, [result, isMuted]);
+    speakNext();
+  }, [result, speakNext]);
+
+  useEffect(() => {
+    if (isMuted && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      spokenQueueRef.current = [];
+      speakingRef.current = false;
+    }
+  }, [isMuted]);
 
   const handleRecognition = useCallback((r: MultiRecognitionResult) => setResult(r), []);
   const handlePersonAdded = useCallback((name: string) => {

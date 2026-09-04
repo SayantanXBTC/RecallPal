@@ -52,6 +52,8 @@ export interface FaceResult {
   bbox: FaceBbox;
   frame_width: number;
   frame_height: number;
+  /** Stable client-side identity assigned by CameraPanel via IoU tracking. */
+  trackId?: number;
 }
 
 export interface MultiRecognitionResult {
