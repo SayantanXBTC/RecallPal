@@ -150,21 +150,45 @@ const STICKY_UNKNOWN_TICKS   = 5;     // hold last name through this many unknow
 
 /** Server can return two overlapping bboxes for the same physical face
  * (RetinaFace occasionally double-fires around glasses / strong shadows).
- * Collapse those to a single detection before tracking so the overlay
- * doesn't sprout twin cards. */
+ * Collapse duplicates before tracking so the overlay doesn't sprout
+ * twin cards.
+ *
+ * Two-tier match:
+ *   1. Any pair with IoU >= 0.4 collapses to the higher-confidence one.
+ *   2. A recognized detection beats an overlapping unknown detection
+ *      even at very low IoU (>=0.10) or when centres are within
+ *      0.70 * mean-side — otherwise a "Sayantan" card and an "Unknown"
+ *      card end up stacked on the same head. */
 function dedupeFaces(faces: FaceResult[]): FaceResult[] {
+  const isRec = (f: FaceResult) => f.status === 'recognized' && !!f.name;
   const kept: FaceResult[] = [];
   for (const f of faces) {
     if (!f.bbox) { kept.push(f); continue; }
-    const dup = kept.findIndex(k => k.bbox && iou(k.bbox, f.bbox!) >= IOU_DEDUP_THRESHOLD);
+
+    // Tier 1: strong overlap.
+    let dup = kept.findIndex(k => k.bbox && iou(k.bbox, f.bbox!) >= IOU_DEDUP_THRESHOLD);
+
+    // Tier 2: soft overlap when one side is recognized and the other unknown.
+    if (dup < 0) {
+      dup = kept.findIndex((k) => {
+        if (!k.bbox) return false;
+        if (isRec(f) === isRec(k)) return false;   // both same status -> only tier 1
+        return iou(k.bbox, f.bbox!) >= 0.10 || centerScore(k.bbox, f.bbox!) <= 0.70;
+      });
+    }
+
     if (dup < 0) { kept.push(f); continue; }
-    // Prefer the one with higher confidence; ties -> larger bbox.
-    const keep = f;
+
+    // Recognized wins over unknown regardless of raw confidence.
     const held = kept[dup];
+    if (isRec(f) && !isRec(held)) { kept[dup] = f; continue; }
+    if (isRec(held) && !isRec(f)) { continue; }
+
+    // Otherwise pick higher confidence; tie -> larger bbox.
     const fConf = f.confidence ?? 0;
     const hConf = held.confidence ?? 0;
     if (fConf > hConf || (fConf === hConf && (f.bbox.w * f.bbox.h) > (held.bbox!.w * held.bbox!.h))) {
-      kept[dup] = keep;
+      kept[dup] = f;
     }
   }
   return kept;
