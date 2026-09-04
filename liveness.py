@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 # Tunable thresholds — pulled from env so ops can adjust without deploy.
 import os
-_MIN_LAPLACIAN_VAR    = float(os.environ.get("LIVENESS_MIN_BLUR_VAR",   "45.0"))
+_MIN_LAPLACIAN_VAR    = float(os.environ.get("LIVENESS_MIN_BLUR_VAR",   "12.0"))
 _MIN_YAW_STD_DEG      = float(os.environ.get("LIVENESS_MIN_YAW_STD",     "5.0"))
 _MAX_PAIR_COSINE_SIM  = float(os.environ.get("LIVENESS_MAX_PAIR_SIM",   "0.995"))
 _MIN_FRAMES_FOR_POSE  = int  (os.environ.get("LIVENESS_MIN_FRAMES",         "3"))
