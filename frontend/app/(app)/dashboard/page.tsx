@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import CameraPanel    from '@/components/CameraPanel';
 import AddPersonModal from '@/components/AddPersonModal';
+import AddPhotosModal from '@/components/AddPhotosModal';
 import PeopleSidebar  from '@/components/PeopleSidebar';
 import { MultiRecognitionResult } from '@/lib/types';
 import { useTheme } from '@/lib/theme-context';
@@ -19,10 +20,16 @@ export default function DashboardPage() {
   const { theme, toggleTheme } = useTheme();
   const dark = theme === 'dark';
 
-  const [result,        setResult]        = useState<MultiRecognitionResult>(IDLE_RESULT);
-  const [isModalOpen,   setIsModalOpen]   = useState(false);
-  const [isMuted,       setIsMuted]       = useState(false);
-  const [refreshPeople, setRefreshPeople] = useState(0);
+  const [result,           setResult]           = useState<MultiRecognitionResult>(IDLE_RESULT);
+  const [isModalOpen,      setIsModalOpen]      = useState(false);
+  const [addPhotosFor,     setAddPhotosFor]     = useState<string | null>(null);
+  const [isMuted,          setIsMuted]          = useState(false);
+  const [refreshPeople,    setRefreshPeople]    = useState(0);
+  // Cache of names we've already offered an add-photos prompt for this session
+  // — prevents the button from re-triggering rate-limited toasts if the user
+  // dismisses. The DB-side embeddings persist across sessions independently
+  // via Supabase, so nothing here needs to survive reload.
+  const suggestedRef = useRef<Set<string>>(new Set());
 
   // Set of trackIds we've already announced this session so a face that
   // stays on screen doesn't get re-announced every recognition tick.
@@ -265,6 +272,10 @@ export default function DashboardPage() {
               onRecognition={handleRecognition}
               currentResult={result}
               onAddRequest={() => setIsModalOpen(true)}
+              onAddPhotosRequest={(name) => {
+                suggestedRef.current.add(name.toLowerCase());
+                setAddPhotosFor(name);
+              }}
             />
           </div>
         </section>
@@ -334,6 +345,17 @@ export default function DashboardPage() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSuccess={handlePersonAdded}
+      />
+
+      {/* ── Add more photos to an existing person (triggered from face card) */}
+      <AddPhotosModal
+        isOpen={addPhotosFor !== null}
+        personName={addPhotosFor ?? ''}
+        onClose={() => setAddPhotosFor(null)}
+        onSuccess={() => {
+          setAddPhotosFor(null);
+          setRefreshPeople((n) => n + 1);
+        }}
       />
     </div>
   );

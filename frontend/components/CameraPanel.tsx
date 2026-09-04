@@ -7,9 +7,10 @@ import { useTheme } from '@/lib/theme-context';
 import { useAuth } from '@/lib/auth-context';
 
 interface CameraPanelProps {
-  onRecognition: (result: MultiRecognitionResult) => void;
-  currentResult: MultiRecognitionResult;
-  onAddRequest?: () => void;
+  onRecognition:       (result: MultiRecognitionResult) => void;
+  currentResult:       MultiRecognitionResult;
+  onAddRequest?:       () => void;
+  onAddPhotosRequest?: (name: string) => void;
 }
 
 function formatLastSeen(iso: string): string {
@@ -180,7 +181,7 @@ function reconcileTracks(prev: TrackedFace[], next: FaceResult[], nextId: { v: n
   return out;
 }
 
-export default function CameraPanel({ onRecognition, currentResult, onAddRequest }: CameraPanelProps) {
+export default function CameraPanel({ onRecognition, currentResult, onAddRequest, onAddPhotosRequest }: CameraPanelProps) {
   const { theme } = useTheme();
   const { token } = useAuth();
   const dark = theme === 'dark';
@@ -422,7 +423,7 @@ export default function CameraPanel({ onRecognition, currentResult, onAddRequest
                 left,
                 top,
                 transform,
-                pointerEvents: isUnknown ? 'auto' : 'none',
+                pointerEvents: 'auto',
                 transition: 'left 0.18s ease, top 0.18s ease',
               }}
             >
@@ -564,6 +565,39 @@ export default function CameraPanel({ onRecognition, currentResult, onAddRequest
                           {face.memory.notes.trim()}
                         </p>
                       </div>
+                    )}
+
+                    {/* Improve recognition — append more photos for this person */}
+                    {onAddPhotosRequest && face.name && (
+                      <button
+                        onClick={() => onAddPhotosRequest(face.name as string)}
+                        style={{
+                          marginTop: 4,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 5,
+                          background: 'rgba(201,148,58,0.14)',
+                          border: '1px solid rgba(201,148,58,0.35)',
+                          borderRadius: 8,
+                          padding: '5px 10px',
+                          cursor: 'pointer',
+                          pointerEvents: 'auto',
+                          color: '#F0C97A',
+                          fontSize: 10,
+                          fontWeight: 700,
+                          letterSpacing: '0.03em',
+                          textTransform: 'uppercase',
+                          width: '100%',
+                        }}
+                        title={`Improve recognition for ${face.name}`}
+                      >
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+                          <line x1="12" y1="4" x2="12" y2="20" />
+                          <line x1="4"  y1="12" x2="20" y2="12" />
+                        </svg>
+                        Add More Photos
+                      </button>
                     )}
                   </div>
                 )}
