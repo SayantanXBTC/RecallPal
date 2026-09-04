@@ -64,14 +64,20 @@ export default function ConversationListener({ active }: Props) {
           const recognized = (facesRef.current || []).find(
             (f) => f.status === 'recognized' && f.name,
           );
-          if (!recognized?.name) continue;   // no known face -> discard
+          if (!recognized?.name) {
+            console.debug('[listener] heard but no known face — discarded:', text);
+            continue;
+          }
           const t = tokenRef.current;
-          if (!t) continue;
+          if (!t) return;
+          console.debug('[listener] saving for', recognized.name, ':', text);
           void fetch('/api/conversations', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t}` },
             body:    JSON.stringify({ person_name: recognized.name, transcript: text }),
-          }).catch(() => {});
+          }).then((r) => {
+            if (!r.ok) r.text().then((body) => console.warn('[listener] save failed', r.status, body));
+          }).catch((err) => console.warn('[listener] save fetch error', err));
         }
       };
 
