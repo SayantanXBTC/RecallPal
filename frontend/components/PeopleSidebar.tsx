@@ -182,16 +182,16 @@ function PersonCard({
           {initials(person.name)}
         </div>
 
-        {/* Name + relation */}
+        {/* Name + relation — warm serif */}
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold truncate leading-tight font-dm-sans"
-             style={{ color: dark ? '#F5EFE8' : '#3A2F28' }}>
-            {person.name}
+          <p className="font-serif truncate leading-tight"
+             style={{ color: dark ? '#F5EFE8' : '#3A2F28', fontSize: '1.02rem' }}>
+            {person.name.charAt(0).toUpperCase() + person.name.slice(1)}
           </p>
           {person.relation && (
-            <p className="text-xs truncate leading-tight font-dm-sans"
-               style={{ color: dark ? '#8A7D72' : '#9A8C84' }}>
-              {person.relation}
+            <p className="text-xs italic truncate leading-tight font-dm-sans mt-0.5"
+               style={{ color: dark ? '#C4B09A' : '#6B5C52' }}>
+              your {person.relation.toLowerCase()}
             </p>
           )}
         </div>
@@ -495,7 +495,7 @@ export default function PeopleSidebar({ refreshTrigger, onAddPerson }: PeopleSid
                   : 'none',
               }}
             >
-              {tab === 'people' ? 'People' : 'Visit Log'}
+              {tab === 'people' ? 'Everyone' : 'Who visited'}
             </button>
           ))}
         </div>
@@ -503,18 +503,22 @@ export default function PeopleSidebar({ refreshTrigger, onAddPerson }: PeopleSid
         {/* People tab header row */}
         {activeTab === 'people' && (
           <div className="flex items-center justify-between px-1 mb-2">
-            <span className="text-[11px] font-semibold uppercase tracking-widest font-dm-sans" style={{ color: dark ? '#8A7D72' : '#9A8C84' }}>
-              {people.length} enrolled
+            <span className="font-dm-sans italic text-sm" style={{ color: dark ? '#C4B09A' : '#6B5C52' }}>
+              {people.length === 0
+                ? 'No one saved yet.'
+                : people.length === 1
+                  ? '1 person saved.'
+                  : `${people.length} people saved.`}
             </span>
             <button
               onClick={onAddPerson}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold font-dm-sans transition-all"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold font-dm-sans transition-all"
               style={{ background: 'linear-gradient(135deg,#C9943A,#F0C97A)', color: 'white', boxShadow: '0 2px 10px rgba(201,148,58,0.30)' }}
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              Add
+              Save someone new
             </button>
           </div>
         )}

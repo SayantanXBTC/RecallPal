@@ -521,7 +521,7 @@ export default function CameraPanel({ onRecognition, currentResult, onAddRequest
             </div>
             {camError
               ? <p className="text-red-400/80 text-sm text-center max-w-xs">{camError}</p>
-              : <p className="text-sm tracking-wider font-dm-sans" style={{ color: softColor }}>Camera off — tap Start to begin</p>
+              : <p className="text-base font-serif italic" style={{ color: softColor }}>The camera is resting. Tap the button below when you&apos;re ready.</p>
             }
           </div>
         )}
@@ -790,26 +790,26 @@ export default function CameraPanel({ onRecognition, currentResult, onAddRequest
           background:  dark ? 'rgba(18,14,9,0.55)'    : 'rgba(255,255,255,0.55)',
         }}
       >
-        <div className="flex items-center gap-2 text-xs font-dm-sans" style={{ color: softColor }}>
+        <div className="flex items-center gap-2 text-sm font-dm-sans" style={{ color: softColor }}>
           {isActive ? (
             <>
               <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#C9943A' }} />
-              <span role="status" aria-live="polite">Scanning every 0.7s</span>
+              <span role="status" aria-live="polite" className="italic">Watching for familiar faces…</span>
             </>
           ) : (
-            <span>Press Start Camera to begin</span>
+            <span className="italic">Ready when you are.</span>
           )}
         </div>
         <button
           onClick={isActive ? stopCamera : startCamera}
-          aria-label={isActive ? 'Stop camera' : 'Start camera'}
-          className="px-5 py-2 rounded-xl text-xs font-semibold font-dm-sans transition-all duration-200"
+          aria-label={isActive ? 'Turn off the camera' : 'Turn on the camera'}
+          className="px-6 py-2.5 rounded-full text-sm font-semibold font-dm-sans transition-all duration-200"
           style={isActive
-            ? { background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.25)', color: '#ef4444' }
+            ? { background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.30)', color: '#ef4444' }
             : { background: 'linear-gradient(135deg,#C9943A,#F0C97A)', color: 'white', boxShadow: '0 4px 14px rgba(201,148,58,0.35)' }
           }
         >
-          {isActive ? 'Stop Video' : 'Start Camera'}
+          {isActive ? 'Turn off' : 'Turn the camera on'}
         </button>
       </div>
     </div>

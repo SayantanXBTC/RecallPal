@@ -273,12 +273,14 @@ export default function DashboardPage() {
 
         {/* Camera — left, 65% */}
         <section className="lg:flex-[65] flex flex-col p-4 min-w-0">
-          {/* Section label */}
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#C9943A' }} />
-            <span className="text-xs font-semibold uppercase tracking-widest font-dm-sans" style={{ color: textSoft }}>
-              Live Camera
-            </span>
+          {/* Section heading — warm, serif */}
+          <div className="mb-3">
+            <h2 className="font-serif leading-tight" style={{ color: textMain, fontSize: '1.35rem' }}>
+              Who is here?
+            </h2>
+            <p className="font-dm-sans text-xs mt-0.5" style={{ color: textSoft }}>
+              Point the camera at a face — I&apos;ll tell you who they are.
+            </p>
           </div>
           <div className="flex-1" style={{ minHeight: 420 }}>
             <CameraPanel
@@ -304,12 +306,14 @@ export default function DashboardPage() {
           className="lg:flex-[35] flex flex-col overflow-hidden"
           style={{ minWidth: 0, maxWidth: '100%' }}
         >
-          {/* Section label */}
-          <div className="flex items-center gap-2 px-4 pt-4 mb-1">
-            <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#C9943A' }} />
-            <span className="text-xs font-semibold uppercase tracking-widest font-dm-sans" style={{ color: textSoft }}>
-              People
-            </span>
+          {/* Section heading — warm, serif */}
+          <div className="px-4 pt-4 mb-1">
+            <h2 className="font-serif leading-tight" style={{ color: textMain, fontSize: '1.35rem' }}>
+              People you love
+            </h2>
+            <p className="font-dm-sans text-xs mt-0.5" style={{ color: textSoft }}>
+              Everyone I&apos;ve been taught to recognise.
+            </p>
           </div>
           <div className="flex-1 overflow-hidden">
             <PeopleSidebar
@@ -337,10 +341,13 @@ export default function DashboardPage() {
           {(() => {
             const recognized = (result.faces ?? []).filter(f => f.status === 'recognized' && f.name);
             const unknowns   = (result.faces ?? []).filter(f => f.status !== 'recognized');
-            if (recognized.length > 0) return `Recognized: ${recognized.map(f => f.name).join(', ')}`;
-            if (unknowns.length > 0)   return 'Unknown face detected';
-            if ((result.faces ?? []).length === 0 && result !== IDLE_RESULT) return 'No face in frame';
-            return 'Waiting for camera…';
+            if (recognized.length > 0) {
+              const names = recognized.map(f => (f.name || '').charAt(0).toUpperCase() + (f.name || '').slice(1)).join(' and ');
+              return `${names} is with you.`;
+            }
+            if (unknowns.length > 0)   return 'Someone new is in the room.';
+            if ((result.faces ?? []).length === 0 && result !== IDLE_RESULT) return 'Waiting for a face.';
+            return 'Ready when you are.';
           })()}
         </span>
         <span className="ml-auto text-[11px] font-dm-sans" style={{ color: textSoft }}>
