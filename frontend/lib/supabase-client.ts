@@ -21,9 +21,9 @@ export function getSupabaseBrowser(): SupabaseClient | null {
   if (_client) return _client;
   _client = createClient(URL, ANON, {
     auth: {
-      persistSession:   false,   // we manage storage manually in auth-context
-      detectSessionInUrl: true,  // parse OAuth tokens from URL fragment
-      autoRefreshToken: false,   // backend refresh flow handles this
+      persistSession:     false, // AuthContext owns storage
+      autoRefreshToken:   false, // backend refresh flow handles this
+      detectSessionInUrl: false, // /auth/callback parses the URL explicitly
       flowType: 'pkce',
     },
   });

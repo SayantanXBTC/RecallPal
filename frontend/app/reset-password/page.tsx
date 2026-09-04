@@ -28,21 +28,29 @@ export default function ResetPasswordPage() {
       return;
     }
     (async () => {
-      const url = window.location.href;
+      const url  = window.location.href;
+      const hash = window.location.hash || '';
       try {
         if (url.includes('code=')) {
-          await supabase.auth.exchangeCodeForSession(url);
+          const { error } = await supabase.auth.exchangeCodeForSession(url);
+          if (error) { setError(error.message); return; }
+        } else if (hash.includes('access_token=')) {
+          const p = new URLSearchParams(hash.slice(1));
+          const access  = p.get('access_token');
+          const refresh = p.get('refresh_token');
+          if (access && refresh) {
+            const { error } = await supabase.auth.setSession({ access_token: access, refresh_token: refresh });
+            if (error) { setError(error.message); return; }
+          }
+        } else {
+          setError('This reset link has expired or is invalid. Please request a new one.');
+          return;
         }
-      } catch {
-        // fall through — getSession will surface the real error
-      }
-      const { data } = await supabase.auth.getSession();
-      if (!data.session) {
-        setError('This reset link has expired or is invalid. Please request a new one.');
+      } catch (e) {
+        setError((e as Error)?.message || 'Reset link failed to open.');
         return;
       }
       setReady(true);
-      // Scrub tokens from the address bar.
       window.history.replaceState({}, '', '/reset-password');
     })();
   }, []);

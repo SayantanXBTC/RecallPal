@@ -23,30 +23,76 @@ export default function AuthCallbackPage() {
       return;
     }
     (async () => {
-      // exchangeCodeForSession for PKCE flow; getSession picks up implicit flow.
-      const url = window.location.href;
-      try {
-        if (url.includes('code=')) {
-          await supabase.auth.exchangeCodeForSession(url);
-        }
-      } catch {
-        // exchange may fail if URL already consumed — fall back to getSession
+      const url    = window.location.href;
+      const hash   = window.location.hash || '';
+      const search = window.location.search || '';
+
+      // Supabase can return the session in two shapes depending on the
+      // provider config: PKCE (?code=...) or implicit (#access_token=...).
+      // Using a loose interim type — supabase-js Session is stricter than
+      // what we thread into hydrateSession.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let session: any = null;
+
+      // ---- Provider-side error surfaced in query or fragment -------------
+      const errParams = new URLSearchParams(
+        search.startsWith('?') ? search.slice(1) : hash.startsWith('#') ? hash.slice(1) : '',
+      );
+      const errCode = errParams.get('error') || errParams.get('error_code');
+      const errMsg  = errParams.get('error_description') || errParams.get('message');
+      if (errCode) {
+        setError(errMsg ? decodeURIComponent(errMsg.replace(/\+/g, ' ')) : `Google sign-in failed (${errCode}).`);
+        setTimeout(() => router.replace('/login'), 3000);
+        return;
       }
-      const { data, error } = await supabase.auth.getSession();
-      if (error || !data.session || !data.session.user) {
-        setError(error?.message || 'Sign-in was cancelled or expired. Please try again.');
+
+      // ---- PKCE flow: ?code=... -----------------------------------------
+      if (url.includes('code=')) {
+        try {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(url);
+          if (error) {
+            setError(error.message || 'Sign-in failed during token exchange.');
+            setTimeout(() => router.replace('/login'), 3000);
+            return;
+          }
+          if (data?.session) session = data.session;
+        } catch (e) {
+          setError((e as Error)?.message || 'Sign-in exchange failed.');
+          setTimeout(() => router.replace('/login'), 3000);
+          return;
+        }
+      }
+
+      // ---- Implicit flow: #access_token=... -----------------------------
+      if (!session && hash.includes('access_token=')) {
+        const p = new URLSearchParams(hash.slice(1));
+        const access  = p.get('access_token');
+        const refresh = p.get('refresh_token');
+        const expires = parseInt(p.get('expires_in') || '3600', 10);
+        if (access && refresh) {
+          const { data, error } = await supabase.auth.setSession({
+            access_token:  access,
+            refresh_token: refresh,
+          });
+          if (!error && data.session) {
+            session = { ...data.session, expires_in: expires };
+          }
+        }
+      }
+
+      if (!session || !session.user) {
+        setError('Sign-in was cancelled or expired. Please try again.');
         setTimeout(() => router.replace('/login'), 2500);
         return;
       }
-      const s = data.session;
+
       hydrateSession(
-        s.access_token,
-        s.refresh_token,
-        { id: s.user.id, email: s.user.email ?? '' },
-        s.expires_in ?? 3600,
+        session.access_token,
+        session.refresh_token,
+        { id: session.user.id, email: session.user.email ?? '' },
+        session.expires_in ?? 3600,
       );
-      // Wipe the URL fragment before navigating away so tokens don't
-      // linger in the browser history.
+      // Wipe tokens from history before navigating away.
       window.history.replaceState({}, '', '/dashboard');
       router.replace('/dashboard');
     })();
