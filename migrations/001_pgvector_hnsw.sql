@@ -94,9 +94,10 @@ create policy "face_embeddings: delete own"
 -- function itself filters by user_id, keeping data isolation intact.
 --
 -- Returns top-k rows with (person_id, person_name, distance) below max_dist.
+drop function if exists public.match_face_embeddings(extensions.vector, integer, double precision, uuid);
 drop function if exists public.match_face_embeddings(vector, integer, double precision, uuid);
 create or replace function public.match_face_embeddings(
-    query_embedding vector(512),
+    query_embedding extensions.vector(512),
     top_k           integer,
     max_distance    double precision,
     target_user     uuid
@@ -109,7 +110,8 @@ returns table (
 language sql
 stable
 security definer
-set search_path = public
+-- extensions is required so pgvector operators (<->, <=>, <#>) resolve.
+set search_path = public, extensions
 as $$
     select
         fe.person_id,
@@ -128,8 +130,8 @@ comment on function public.match_face_embeddings is
 
 -- Grant execute to server roles only. anon must NOT call this directly
 -- (would allow scanning other users when target_user is spoofed).
-revoke all on function public.match_face_embeddings(vector, integer, double precision, uuid) from public, anon, authenticated;
-grant execute on function public.match_face_embeddings(vector, integer, double precision, uuid) to service_role;
+revoke all on function public.match_face_embeddings(extensions.vector, integer, double precision, uuid) from public, anon, authenticated;
+grant execute on function public.match_face_embeddings(extensions.vector, integer, double precision, uuid) to service_role;
 
 -- ---- 6. Session-level HNSW search tuning ----------------------------------
 -- The Python client can execute: SELECT set_config('hnsw.ef_search','40',true);
