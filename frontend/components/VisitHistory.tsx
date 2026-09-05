@@ -29,20 +29,29 @@ interface VisitHistoryProps {
   refreshTrigger?: number;
 }
 
+function toLocalDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export default function VisitHistory({ refreshTrigger = 0 }: VisitHistoryProps) {
   const { theme } = useTheme();
   const { token } = useAuth();
   const dark = theme === 'dark';
 
+  const todayStr = toLocalDate(new Date());
+  const [date,          setDate]          = useState(todayStr);
   const [events,        setEvents]        = useState<RecognitionEvent[]>([]);
   const [loading,       setLoading]       = useState(true);
   const [confirmClear,  setConfirmClear]  = useState(false);
   const [clearing,      setClearing]      = useState(false);
 
+  const isToday = date === todayStr;
+
   useEffect(() => {
     let cancelled = false;
     const load = () => {
-      fetch('/api/events?limit=50', {
+      const qs = `?limit=200&date=${encodeURIComponent(date)}`;
+      fetch(`/api/events${qs}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
         .then(async (r) => {
@@ -64,11 +73,20 @@ export default function VisitHistory({ refreshTrigger = 0 }: VisitHistoryProps) 
     };
     setLoading(true);
     load();
-    // Refresh every 20s. Anything faster + a rate-limit hit and the
-    // list stops updating with cryptic 'Failed to fetch' spam.
-    const timer = setInterval(load, 20_000);
-    return () => { cancelled = true; clearInterval(timer); };
-  }, [refreshTrigger, token]);
+    // Poll only while viewing today — historic days don't change.
+    const timer = isToday ? setInterval(load, 20_000) : null;
+    return () => { cancelled = true; if (timer) clearInterval(timer); };
+  }, [refreshTrigger, token, date, isToday]);
+
+  // Auto-jump the picker to the new day when the clock rolls over.
+  useEffect(() => {
+    const check = () => {
+      const now = toLocalDate(new Date());
+      if (isToday && now !== todayStr) setDate(now);
+    };
+    const t = setInterval(check, 60_000);
+    return () => clearInterval(t);
+  }, [isToday, todayStr]);
 
   const handleClearAll = async () => {
     setClearing(true);
@@ -89,19 +107,47 @@ export default function VisitHistory({ refreshTrigger = 0 }: VisitHistoryProps) 
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header row with clear button */}
+      {/* Date picker row — always visible */}
+      <div className="flex items-center justify-between gap-2 px-3 pb-2 shrink-0">
+        <input
+          type="date"
+          value={date}
+          max={todayStr}
+          onChange={(e) => setDate(e.target.value)}
+          aria-label="Choose a day"
+          className="rounded-lg px-2.5 py-1 text-xs font-dm-sans outline-none"
+          style={{
+            background: dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+            border:     `1px solid ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
+            color:      textMain,
+          }}
+        />
+        <div className="flex items-center gap-2">
+          {!isToday && (
+            <button
+              onClick={() => setDate(todayStr)}
+              className="text-[11px] font-semibold font-dm-sans px-2.5 py-1 rounded-lg"
+              style={{ background: 'rgba(201,148,58,0.12)', border: '1px solid rgba(201,148,58,0.30)', color: '#C9943A' }}
+            >
+              Today
+            </button>
+          )}
+          {!loading && events.length > 0 && !confirmClear && (
+            <button
+              onClick={() => setConfirmClear(true)}
+              className="text-[11px] font-semibold font-dm-sans px-2.5 py-1 rounded-lg transition-all"
+              style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.18)', color: 'rgba(239,68,68,0.70)' }}
+            >
+              Clear All
+            </button>
+          )}
+        </div>
+      </div>
       {!loading && events.length > 0 && !confirmClear && (
-        <div className="flex items-center justify-between px-3 pb-2 shrink-0">
-          <span className="text-[11px] font-dm-sans" style={{ color: softColor }}>
-            {events.length} recent visits
+        <div className="px-3 pb-2 shrink-0">
+          <span className="text-[11px] font-dm-sans italic" style={{ color: softColor }}>
+            {events.length} {events.length === 1 ? 'visit' : 'visits'} {isToday ? 'today' : 'on this day'}
           </span>
-          <button
-            onClick={() => setConfirmClear(true)}
-            className="text-[11px] font-semibold font-dm-sans px-2.5 py-1 rounded-lg transition-all"
-            style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.18)', color: 'rgba(239,68,68,0.70)' }}
-          >
-            Clear All
-          </button>
         </div>
       )}
 
@@ -153,8 +199,8 @@ export default function VisitHistory({ refreshTrigger = 0 }: VisitHistoryProps) 
                 d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <p className="text-sm font-dm-sans" style={{ color: softColor }}>
-            No visits recorded yet
+          <p className="text-sm font-dm-sans italic" style={{ color: softColor }}>
+            {isToday ? 'No visits yet today.' : 'No one came by that day.'}
           </p>
         </div>
       )}

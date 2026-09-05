@@ -409,7 +409,7 @@ limiter = Limiter(
     app=app,
     key_func=_rate_limit_key,
     storage_uri=os.environ.get("RATELIMIT_STORAGE_URI", "memory://"),
-    default_limits=["1000 per hour"],
+    default_limits=["5000 per hour"],
     headers_enabled=True,
 )
 
@@ -1353,6 +1353,7 @@ def seed():
 
 @app.route("/api/events", methods=["GET"])
 @require_auth
+@limiter.limit("1000 per hour")
 def get_events():
     """
     Return the 50 most recent recognition events for the authenticated user.
@@ -1376,8 +1377,11 @@ def get_events():
         except ValueError as exc:
             return jsonify({"status": "error", "message": str(exc)}), 401
 
-        limit = min(int(request.args.get("limit", 50)), 100)
+        limit = min(int(request.args.get("limit", 50)), 200)
         person_filter = (request.args.get("person") or "").strip().lower()
+        # Optional YYYY-MM-DD filter — when set, returns only visits from
+        # that day (client's local date). Used by the visit-log day picker.
+        date_str = (request.args.get("date") or "").strip()
 
         from supabase import create_client
         url = os.environ.get("SUPABASE_URL", "").strip()
@@ -1393,6 +1397,16 @@ def get_events():
         )
         if person_filter:
             query = query.eq("person_name", person_filter)
+
+        if date_str:
+            try:
+                from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+                day = _dt.strptime(date_str, "%Y-%m-%d").replace(tzinfo=_tz.utc)
+                nxt = day + _td(days=1)
+                query = query.gte("recognized_at", day.isoformat()) \
+                             .lt("recognized_at", nxt.isoformat())
+            except Exception as exc:
+                logger.warning("Invalid date filter %s: %s", date_str, exc)
 
         result = query.execute()
         return jsonify({"events": result.data or []})
