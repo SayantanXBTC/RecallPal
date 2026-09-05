@@ -216,13 +216,20 @@ export default function SummaryPage() {
           )}
           {/* Large, obvious date picker pill with icon + label. */}
           <label
-            className="relative inline-flex items-center gap-2 rounded-full pl-4 pr-3 py-2 cursor-pointer transition-all hover:shadow-warm-sm overflow-hidden"
+            className="relative inline-flex items-center gap-2 rounded-full pl-4 pr-3 py-2 cursor-pointer transition-all hover:shadow-warm-sm"
             style={{
               background: 'linear-gradient(135deg, rgba(201,148,58,0.15), rgba(240,201,122,0.10))',
               border:     '1px solid rgba(201,148,58,0.40)',
               color:      textMain,
             }}
             title="Choose a different day"
+            onClick={(e) => {
+              const inp = (e.currentTarget as HTMLLabelElement).querySelector('input[type=date]') as HTMLInputElement | null;
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              if (inp && typeof (inp as any).showPicker === 'function') {
+                try { (inp as unknown as { showPicker: () => void }).showPicker(); } catch { /* Safari <17 no-op */ }
+              }
+            }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C9943A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
@@ -239,14 +246,14 @@ export default function SummaryPage() {
               max={todayStr}
               onChange={e => setDate(e.target.value)}
               aria-label="Choose a day"
-              className="sr-only-native"
               style={{
                 position: 'absolute',
+                right: 4,
+                bottom: 0,
+                width: 1,
+                height: 1,
                 opacity: 0,
-                inset: 0,
-                width: '100%',
-                height: '100%',
-                cursor: 'pointer',
+                pointerEvents: 'none',
               }}
             />
           </label>

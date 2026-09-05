@@ -119,13 +119,20 @@ export default function VisitHistory({ refreshTrigger = 0 }: VisitHistoryProps) 
       {/* Date picker row — always visible */}
       <div className="flex items-center justify-between gap-2 px-3 pb-2 shrink-0">
         <label
-          className="relative inline-flex items-center gap-2 rounded-full pl-3 pr-2.5 py-1.5 cursor-pointer overflow-hidden"
+          className="relative inline-flex items-center gap-2 rounded-full pl-3 pr-2.5 py-1.5 cursor-pointer"
           style={{
             background: 'linear-gradient(135deg, rgba(201,148,58,0.15), rgba(240,201,122,0.10))',
             border:     '1px solid rgba(201,148,58,0.35)',
             color:      textMain,
           }}
           title="Choose a different day"
+          onClick={(e) => {
+            const inp = (e.currentTarget as HTMLLabelElement).querySelector('input[type=date]') as HTMLInputElement | null;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            if (inp && typeof (inp as any).showPicker === 'function') {
+              try { (inp as unknown as { showPicker: () => void }).showPicker(); } catch { /* no-op */ }
+            }
+          }}
         >
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#C9943A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
@@ -142,7 +149,7 @@ export default function VisitHistory({ refreshTrigger = 0 }: VisitHistoryProps) 
             max={todayStr}
             onChange={(e) => setDate(e.target.value)}
             aria-label="Choose a day"
-            style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }}
+            style={{ position: 'absolute', right: 4, bottom: 0, width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
           />
         </label>
         <div className="flex items-center gap-2">
