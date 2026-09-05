@@ -705,7 +705,19 @@ class FaceEngine:
         self.MODEL_NAME:     str   = _resolve_model_name()
         cfg                        = _MODEL_CONFIG.get(self.MODEL_NAME, _DEFAULT_CONFIG)
         self.metric:         str   = cfg["metric"]
-        self.threshold:      float = threshold if threshold is not None else cfg["threshold"]
+        # Env override lets ops tune threshold per model bundle without a
+        # redeploy — buffalo_sc (MobileFaceNet) needs a looser gate than
+        # buffalo_l (ArcFace r100).
+        env_thresh = os.environ.get("RECOGNITION_THRESHOLD")
+        if threshold is not None:
+            self.threshold = float(threshold)
+        elif env_thresh:
+            try:
+                self.threshold = float(env_thresh)
+            except ValueError:
+                self.threshold = float(cfg["threshold"])
+        else:
+            self.threshold = float(cfg["threshold"])
         self.user_id:        str   = user_id
         self._store:         SupabaseEmbeddingStore      = SupabaseEmbeddingStore()
         self.database:      dict[str, list[np.ndarray]] = {}
