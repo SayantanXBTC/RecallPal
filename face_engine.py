@@ -64,18 +64,39 @@ except AttributeError:
 # ---------------------------------------------------------------------------
 _FACE_APP = None                       # type: ignore[var-annotated]
 _FACE_APP_LOCK = threading.Lock()
-_INSIGHTFACE_DET_SIZE = (640, 640)
+# Detection resolution — smaller = less RAM + faster on CPU. 512 is a
+# good balance for webcam-distance faces; drop to 320 on very constrained
+# hosts (INSIGHTFACE_DET_SIZE=320).
+_INSIGHTFACE_DET_SIZE = (
+    int(os.environ.get("INSIGHTFACE_DET_SIZE", "512")),
+    int(os.environ.get("INSIGHTFACE_DET_SIZE", "512")),
+)
+# Model bundle — buffalo_sc is single-model, ~16 MB, CPU-friendly.
+# buffalo_l is higher-accuracy but ~300 MB and needs ~1 GB RAM to load.
+_INSIGHTFACE_MODEL = os.environ.get("INSIGHTFACE_MODEL", "buffalo_sc")
+
+
+def _purge_model_cache(name: str) -> None:
+    """Delete a corrupted model cache so the next boot re-downloads clean."""
+    cache_dir = os.path.join(os.path.expanduser("~"), ".insightface", "models", name)
+    zip_path  = os.path.join(os.path.expanduser("~"), ".insightface", "models", f"{name}.zip")
+    for path in (cache_dir, zip_path):
+        try:
+            if os.path.isdir(path):
+                import shutil
+                shutil.rmtree(path, ignore_errors=True)
+            elif os.path.isfile(path):
+                os.remove(path)
+        except Exception as exc:
+            logger.warning("face_engine: could not purge %s: %s", path, exc)
 
 
 def _get_face_app():
     """Lazy-initialise a process-wide insightface FaceAnalysis instance.
 
-    Uses ``buffalo_l`` (RetinaFace-10G detector + ArcFace r100 embedder).
-    Model weights live at ``~/.insightface/models/buffalo_l/`` — the same
-    directory already populated by _ensure_arcface_model(), so no extra
-    download is needed if that path is already warm.
-
-    Provider order prefers CUDA when available, falls back to CPU.
+    Model bundle picked via INSIGHTFACE_MODEL env (default ``buffalo_sc``).
+    On protobuf-parse failure the cached weights are purged and the load
+    is retried once — this recovers from OOM-truncated downloads.
     """
     global _FACE_APP
     if _FACE_APP is not None:
@@ -95,9 +116,26 @@ def _get_face_app():
         providers = [p for p in ("CUDAExecutionProvider", "CPUExecutionProvider") if p in available]
         if not providers:
             providers = ["CPUExecutionProvider"]
-        app = FaceAnalysis(name="buffalo_l", providers=providers)
         ctx_id = 0 if "CUDAExecutionProvider" in providers else -1
-        app.prepare(ctx_id=ctx_id, det_size=_INSIGHTFACE_DET_SIZE)
+
+        def _build():
+            a = FaceAnalysis(name=_INSIGHTFACE_MODEL, providers=providers)
+            a.prepare(ctx_id=ctx_id, det_size=_INSIGHTFACE_DET_SIZE)
+            return a
+
+        try:
+            app = _build()
+        except Exception as exc:
+            msg = str(exc)
+            if "Protobuf" in msg or "INVALID_PROTOBUF" in msg:
+                logger.warning(
+                    "face_engine: corrupted %s cache detected (%s) — purging and retrying once.",
+                    _INSIGHTFACE_MODEL, msg,
+                )
+                _purge_model_cache(_INSIGHTFACE_MODEL)
+                app = _build()
+            else:
+                raise
         # Warm-up: first call is slow due to graph optimisation.
         try:
             app.get(np.zeros((_INSIGHTFACE_DET_SIZE[1], _INSIGHTFACE_DET_SIZE[0], 3), dtype=np.uint8))
@@ -105,8 +143,8 @@ def _get_face_app():
             pass
         _FACE_APP = app
         logger.info(
-            "face_engine: insightface FaceAnalysis(buffalo_l) ready. providers=%s det_size=%s",
-            providers, _INSIGHTFACE_DET_SIZE,
+            "face_engine: insightface FaceAnalysis(%s) ready. providers=%s det_size=%s",
+            _INSIGHTFACE_MODEL, providers, _INSIGHTFACE_DET_SIZE,
         )
     return _FACE_APP
 
