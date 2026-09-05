@@ -204,20 +204,52 @@ export default function SummaryPage() {
           Today&apos;s visits
         </span>
 
-        <div className="ml-auto">
-          <input
-            type="date"
-            value={date}
-            max={todayStr}
-            onChange={e => setDate(e.target.value)}
-            aria-label="Choose a day"
-            className="rounded-full px-4 py-2 text-sm font-dm-sans outline-none"
+        <div className="ml-auto flex items-center gap-2">
+          {date !== todayStr && (
+            <button
+              onClick={() => setDate(todayStr)}
+              className="rounded-full px-3 py-2 text-xs font-semibold font-dm-sans"
+              style={{ background: 'rgba(201,148,58,0.14)', border: '1px solid rgba(201,148,58,0.35)', color: '#C9943A' }}
+            >
+              Today
+            </button>
+          )}
+          {/* Large, obvious date picker pill with icon + label. */}
+          <label
+            className="relative inline-flex items-center gap-2 rounded-full pl-4 pr-3 py-2 cursor-pointer transition-all hover:shadow-warm-sm overflow-hidden"
             style={{
-              background: dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
-              border:     `1px solid ${border}`,
+              background: 'linear-gradient(135deg, rgba(201,148,58,0.15), rgba(240,201,122,0.10))',
+              border:     '1px solid rgba(201,148,58,0.40)',
               color:      textMain,
             }}
-          />
+            title="Choose a different day"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C9943A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2"  x2="16" y2="6" />
+              <line x1="8"  y1="2"  x2="8"  y2="6" />
+              <line x1="3"  y1="10" x2="21" y2="10" />
+            </svg>
+            <span className="font-dm-sans text-sm font-semibold select-none">
+              {new Date(date + 'T12:00:00').toLocaleDateString([], { day: 'numeric', month: 'short' })}
+            </span>
+            <input
+              type="date"
+              value={date}
+              max={todayStr}
+              onChange={e => setDate(e.target.value)}
+              aria-label="Choose a day"
+              className="sr-only-native"
+              style={{
+                position: 'absolute',
+                opacity: 0,
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                cursor: 'pointer',
+              }}
+            />
+          </label>
         </div>
       </header>
 

@@ -118,19 +118,33 @@ export default function VisitHistory({ refreshTrigger = 0 }: VisitHistoryProps) 
     <div className="flex flex-col h-full">
       {/* Date picker row — always visible */}
       <div className="flex items-center justify-between gap-2 px-3 pb-2 shrink-0">
-        <input
-          type="date"
-          value={date}
-          max={todayStr}
-          onChange={(e) => setDate(e.target.value)}
-          aria-label="Choose a day"
-          className="rounded-lg px-2.5 py-1 text-xs font-dm-sans outline-none"
+        <label
+          className="relative inline-flex items-center gap-2 rounded-full pl-3 pr-2.5 py-1.5 cursor-pointer overflow-hidden"
           style={{
-            background: dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
-            border:     `1px solid ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
+            background: 'linear-gradient(135deg, rgba(201,148,58,0.15), rgba(240,201,122,0.10))',
+            border:     '1px solid rgba(201,148,58,0.35)',
             color:      textMain,
           }}
-        />
+          title="Choose a different day"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#C9943A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+            <line x1="16" y1="2"  x2="16" y2="6" />
+            <line x1="8"  y1="2"  x2="8"  y2="6" />
+            <line x1="3"  y1="10" x2="21" y2="10" />
+          </svg>
+          <span className="font-dm-sans text-xs font-semibold select-none">
+            {new Date(date + 'T12:00:00').toLocaleDateString([], { day: 'numeric', month: 'short' })}
+          </span>
+          <input
+            type="date"
+            value={date}
+            max={todayStr}
+            onChange={(e) => setDate(e.target.value)}
+            aria-label="Choose a day"
+            style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }}
+          />
+        </label>
         <div className="flex items-center gap-2">
           {!isToday && (
             <button
