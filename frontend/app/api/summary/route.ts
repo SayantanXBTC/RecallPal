@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(req: NextRequest) {
-  const date  = req.nextUrl.searchParams.get('date') ?? '';
+  const date  = req.nextUrl.searchParams.get('date')          ?? '';
+  const tzOff = req.nextUrl.searchParams.get('tz_offset_min') ?? '';
   const auth  = req.headers.get('authorization') ?? '';
-  const query = date ? `?date=${encodeURIComponent(date)}` : '';
+  const parts: string[] = [];
+  if (date)  parts.push(`date=${encodeURIComponent(date)}`);
+  if (tzOff) parts.push(`tz_offset_min=${encodeURIComponent(tzOff)}`);
+  const query = parts.length ? `?${parts.join('&')}` : '';
   const base  = process.env.BACKEND_URL || 'http://localhost:5000';
   const url   = `${base}/api/summary/daily${query}`;
 

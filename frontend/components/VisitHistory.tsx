@@ -49,9 +49,16 @@ export default function VisitHistory({ refreshTrigger = 0 }: VisitHistoryProps) 
 
   useEffect(() => {
     let cancelled = false;
+    // Local day bounds so an event just after / before UTC midnight
+    // still lands on the right day for the caregiver.
+    const [y, m, d] = date.split('-').map(Number);
+    const dayStart  = new Date(y, (m - 1), d, 0, 0, 0, 0).getTime();
+    const dayEnd    = dayStart + 24 * 60 * 60 * 1000;
+
     const load = () => {
-      const qs = `?limit=200&date=${encodeURIComponent(date)}`;
-      fetch(`/api/events${qs}`, {
+      // Ask for a big window and filter client-side. Backend still limits
+      // to 200 rows, which is plenty for a day (throttle = 1/min/person).
+      fetch(`/api/events?limit=200`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
         .then(async (r) => {
@@ -59,11 +66,14 @@ export default function VisitHistory({ refreshTrigger = 0 }: VisitHistoryProps) 
           if (!r.ok) console.warn('[visits] /api/events', r.status, body);
           return body;
         })
-        .then((d) => {
-          if (!cancelled) {
-            const list = Array.isArray(d?.events) ? d.events : [];
-            setEvents(list);
-          }
+        .then((raw) => {
+          if (cancelled) return;
+          const all = Array.isArray(raw?.events) ? raw.events : [];
+          const localFiltered = (all as RecognitionEvent[]).filter((ev) => {
+            const t = new Date(ev.recognized_at).getTime();
+            return t >= dayStart && t < dayEnd;
+          });
+          setEvents(localFiltered);
         })
         .catch((err) => {
           console.warn('[visits] fetch error', err);
@@ -73,7 +83,6 @@ export default function VisitHistory({ refreshTrigger = 0 }: VisitHistoryProps) 
     };
     setLoading(true);
     load();
-    // Poll only while viewing today — historic days don't change.
     const timer = isToday ? setInterval(load, 20_000) : null;
     return () => { cancelled = true; if (timer) clearInterval(timer); };
   }, [refreshTrigger, token, date, isToday]);

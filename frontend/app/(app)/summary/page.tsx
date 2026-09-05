@@ -146,7 +146,8 @@ export default function SummaryPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/summary?date=${d}`, {
+      const tzOff = -new Date().getTimezoneOffset();  // minutes east of UTC
+      const res = await fetch(`/api/summary?date=${d}&tz_offset_min=${tzOff}`, {
         headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       });
       const data = await res.json();

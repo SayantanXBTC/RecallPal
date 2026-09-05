@@ -1469,6 +1469,15 @@ def daily_summary():
             return jsonify({"status": "error", "message": str(exc)}), 401
 
         date_str = (request.args.get("date") or "").strip()
+        # Client sends its timezone offset in minutes east of UTC (as
+        # Date.getTimezoneOffset() negated). Falls back to UTC when
+        # absent, which is fine for the API tests but wrong for a real
+        # caregiver whose local midnight != UTC midnight.
+        try:
+            tz_off_min = int(request.args.get("tz_offset_min", "0"))
+        except ValueError:
+            tz_off_min = 0
+
         if date_str:
             try:
                 target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
@@ -1477,10 +1486,12 @@ def daily_summary():
         else:
             target_date = datetime.now(timezone.utc).date()
 
-        day_start = datetime(target_date.year, target_date.month, target_date.day,
-                             0, 0, 0, tzinfo=timezone.utc)
-        day_end   = datetime(target_date.year, target_date.month, target_date.day,
-                             23, 59, 59, 999999, tzinfo=timezone.utc)
+        # Local midnight in the caregiver's tz, converted to UTC for the
+        # DB range query.
+        from datetime import timedelta as _td
+        local_midnight = datetime(target_date.year, target_date.month, target_date.day, 0, 0, 0)
+        day_start = (local_midnight - _td(minutes=tz_off_min)).replace(tzinfo=timezone.utc)
+        day_end   = day_start + _td(days=1) - _td(microseconds=1)
 
         from supabase import create_client
         url    = os.environ.get("SUPABASE_URL", "").strip()
