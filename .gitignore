@@ -100,3 +100,13 @@ docs/private/
 # ── Misc ───────────────────────────────────────────────────────────────────
 error.html
 *.pkl
+
+# ── Markdown — README is the only .md that ever ships to GitHub ────────────
+# Any *.md at any depth is ignored (planning docs, changelogs, notes,
+# CLAUDE.md, session transcripts, etc.). README.md at the repo root and
+# any LICENSE / CODE_OF_CONDUCT are explicitly whitelisted below.
+*.md
+**/*.md
+!README.md
+!LICENSE.md
+!CODE_OF_CONDUCT.md
