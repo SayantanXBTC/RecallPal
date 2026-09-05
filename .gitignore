@@ -70,13 +70,32 @@ desktop.ini
 *.swp
 *.swo
 
-# ── Claude / AI tooling (local only) ───────────────────────────────────────
+# ── AI / editor tooling (local only, never commit) ─────────────────────────
 .claude/
+.claude-*
 CLAUDE.md
+CLAUDE.local.md
 .mcp.json
+.cursorrules
+.cursor/
+.aider*
+.continue/
+.github-copilot*
+.windsurf/
+.copilot*
+
+# ── Note-taking / knowledge tools (local only) ─────────────────────────────
+.obsidian/
+.notion/
+.roam/
+.logseq/
+.zettlr/
+*.md.notion
 
 # ── Internal planning docs (private) ───────────────────────────────────────
 docs/superpowers/
+docs/plans/
+docs/private/
 
 # ── Misc ───────────────────────────────────────────────────────────────────
 error.html

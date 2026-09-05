@@ -2,7 +2,9 @@
 
 Hey — I built this because my grandmother stopped recognising me last winter, and there was nothing on the shelf that felt gentle enough to actually put in her home. Everything was either a hospital-grade device with a price tag to match, or a face-unlock demo dressed up as an app.
 
-RecallPal is a webcam sits on the table. When someone walks in, a soft card slides in beside their face saying "This is Sayantan, your grandson, 22, likes chess." The voice announces it too, once, quietly. That's it. No alarms. No dashboards. No "engagement metrics."
+RecallPal is a webcam that sits on the table. When someone walks in, a soft card slides in beside their face saying "This is Sayantan, your grandson. He is 22 years old. You saw him just now." A calm voice reads it out too, once, quietly. That's it. No alarms. No dashboards. No "engagement metrics."
+
+There's also **EDITH**, a small assistant bubble in the corner. She notices when a face is unfamiliar and gently offers to save them, walks a lost caregiver through any step in plain language, and answers "how do I add my daughter?" the same way a patient family member would.
 
 ---
 
@@ -14,7 +16,9 @@ RecallPal is a webcam sits on the table. When someone walks in, a soft card slid
 - **Face tracking across frames** — cards follow the right face when more than one person is in the room. No mixing up.
 - **Enrol in seconds** — 5–10 webcam snaps of a person, a name, relation, done. Behind the scenes each photo becomes a 512-d vector.
 - **Consent + audit built in** — biometric data is Article 9 special-category under GDPR, so every enrol requires an explicit consent record, every deletion is logged, and there's a one-click "erase everything about me" endpoint.
-- **Visit log + daily recap** — who visited today, how many times, first / last time.
+- **Visit log + daily recap** — who visited today, how many times, from what time to what time. A gold date pill in the corner lets the caregiver flip back to any past day.
+- **Sign in with Google or email** — Supabase Auth handles OAuth, password reset via email, and Google profile pictures come along automatically.
+- **EDITH assistant** — Claude-backed helper that sees what's on screen and offers the next step in short, warm sentences. Voice input, voice output, and a mute toggle when the room needs to be quiet.
 
 ---
 
@@ -45,7 +49,8 @@ webcam → Next.js frontend → Flask backend → insightface (ArcFace ONNX) →
 | Backend          | Flask, Gunicorn, python-jose, flask-limiter, flask-cors     |
 | Face ML          | insightface (RetinaFace + ArcFace r100, ONNX runtime)       |
 | Database         | Supabase — Postgres + pgvector (HNSW index)                 |
-| Auth             | Supabase Auth (JWT, HS256 / ES256 via JWKS)                 |
+| Auth             | Supabase Auth (JWT, HS256 / ES256 via JWKS + Google OAuth)  |
+| Assistant        | Anthropic Claude (Haiku 4.5) + Web Speech STT/TTS           |
 | Observability    | Sentry + structlog JSON logs + Prometheus (`/metrics`)      |
 | Optional GPU     | Split inference microservice + Redis-backed RQ queue        |
 | Deploy           | Vercel (frontend) + Render (backend) — HTTPS auto           |
@@ -81,7 +86,8 @@ Then Settings → API — grab:
 
 ```bash
 cp .env.example .env
-# fill in the four SUPABASE_* keys + a random FLASK_SECRET_KEY
+# fill in the four SUPABASE_* keys, a random FLASK_SECRET_KEY,
+# and optionally your ANTHROPIC_API_KEY (needed for EDITH).
 pip install -r requirements.txt
 python app.py
 ```
@@ -168,8 +174,10 @@ Everything under `/api/*`. Auth = `Authorization: Bearer <access_token>` unless 
 | DELETE | `/api/consent/<id>`            | yes  | revoke                                            |
 | GET    | `/api/audit`                   | yes  | user-scoped audit log                             |
 | DELETE | `/api/me`                      | yes  | right-to-erasure — wipes everything               |
-| GET    | `/api/events`                  | yes  | visit history                                     |
-| GET    | `/api/daily-summary`           | yes  | today's visitor recap                             |
+| GET    | `/api/events?date=YYYY-MM-DD`  | yes  | visit history (per day, tz-aware)                 |
+| GET    | `/api/summary/daily?date=…`    | yes  | warm daily visitor recap                          |
+| POST   | `/api/assistant/chat`          | yes  | ask EDITH a question with page context            |
+| POST   | `/api/auth/reset-password`     | no   | email a password-reset link via Supabase          |
 | GET    | `/metrics`                     | no   | Prometheus scrape                                 |
 
 ---
