@@ -49,9 +49,14 @@ logger = logging.getLogger(__name__)
 # Haar-cascade retained as a last-resort fallback if insightface fails to
 # initialise (e.g. offline build with no model weights). Primary path is the
 # insightface FaceAnalysis pipeline defined below.
-_FACE_CASCADE = cv2.CascadeClassifier(
-    cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-)
+try:
+    _FACE_CASCADE = cv2.CascadeClassifier(
+        cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+    )
+except AttributeError:
+    # opencv-python 5.x dropped CascadeClassifier. Fallback path unused when
+    # insightface loads successfully (the normal case in production).
+    _FACE_CASCADE = None
 
 # ---------------------------------------------------------------------------
 # insightface FaceAnalysis — RetinaFace detection + ArcFace embedding in a
@@ -270,6 +275,8 @@ def _crop_largest_face(frame: np.ndarray) -> Optional[np.ndarray]:
 
     Returns ``None`` when no face is detected.
     """
+    if _FACE_CASCADE is None:
+        return None
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     faces = _FACE_CASCADE.detectMultiScale(
         gray,
@@ -310,6 +317,8 @@ def _crop_largest_face(frame: np.ndarray) -> Optional[np.ndarray]:
 
 def _detect_all_faces(frame: np.ndarray) -> list[tuple[int, int, int, int]]:
     """Detect every face in frame. Returns list of (x, y, w, h) bounding boxes."""
+    if _FACE_CASCADE is None:
+        return []
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     faces = _FACE_CASCADE.detectMultiScale(
         gray, scaleFactor=1.05, minNeighbors=3, minSize=(40, 40),
