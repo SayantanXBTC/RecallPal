@@ -64,9 +64,9 @@ export default function VisitHistory({ refreshTrigger = 0 }: VisitHistoryProps) 
     };
     setLoading(true);
     load();
-    // Refresh every 8s so newly recorded visits appear without the
-    // caregiver having to bump the refresh trigger by other means.
-    const timer = setInterval(load, 8_000);
+    // Refresh every 20s. Anything faster + a rate-limit hit and the
+    // list stops updating with cryptic 'Failed to fetch' spam.
+    const timer = setInterval(load, 20_000);
     return () => { cancelled = true; clearInterval(timer); };
   }, [refreshTrigger, token]);
 

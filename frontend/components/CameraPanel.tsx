@@ -284,7 +284,36 @@ function reconcileTracks(prev: TrackedFace[], next: FaceResult[], nextId: { v: n
       out.push({ ...prev[pi], missedTicks: prev[pi].missedTicks + 1 });
     }
   }
-  return collapseByName(collapseOverlappingTracks(out));
+  return dropUnknownsInsideRecognized(collapseByName(collapseOverlappingTracks(out)));
+}
+
+/** Sometimes RetinaFace fires a second bbox on the same head (hair vs
+ *  chin, glasses vs mouth), the recognizer only gets embedding for one
+ *  of them, and the other stays labelled 'Unknown'. Result: a
+ *  Sayantan card AND an Unknown card floating on the same face.
+ *
+ *  Drop any unknown whose bbox overlaps a recognized bbox at all, or
+ *  whose centre lies within 1.4x the mean side of a recognized track's
+ *  bbox. Genuine strangers (well-separated bbox) survive. */
+function dropUnknownsInsideRecognized(tracks: TrackedFace[]): TrackedFace[] {
+  const rec = tracks.filter((t) => t.status === 'recognized' && !!t.name && t.bbox);
+  if (rec.length === 0) return tracks;
+  return tracks.filter((t) => {
+    if (t.status === 'recognized' || !t.bbox) return true;
+    return !rec.some((r) => {
+      const rb = r.bbox!;
+      if (iou(rb, t.bbox!) > 0) return true;
+      // Also treat 'centre inside 1.4x expanded recognized bbox' as overlap.
+      const cx = t.bbox!.x + t.bbox!.w / 2;
+      const cy = t.bbox!.y + t.bbox!.h / 2;
+      const pad = 0.20;   // 20% padding around the recognized bbox
+      const x1 = rb.x - rb.w * pad;
+      const y1 = rb.y - rb.h * pad;
+      const x2 = rb.x + rb.w * (1 + pad);
+      const y2 = rb.y + rb.h * (1 + pad);
+      return cx >= x1 && cx <= x2 && cy >= y1 && cy <= y2;
+    });
+  });
 }
 
 /** Hard rule: never show two cards with the same recognized name. If
