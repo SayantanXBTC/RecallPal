@@ -162,6 +162,24 @@ const STICKY_UNKNOWN_TICKS   = 5;     // hold last name through this many unknow
 function dedupeFaces(faces: FaceResult[]): FaceResult[] {
   const isRec = (f: FaceResult) => f.status === 'recognized' && !!f.name;
   const sameId = (a: FaceResult, b: FaceResult) => isRec(a) && isRec(b) && a.name === b.name;
+
+  // First-pass filter: if any recognized face is present, drop unknown
+  // detections that are much smaller than the largest recognized bbox
+  // (typical false positives: photo on wall behind user, reflection,
+  // TV in background). Threshold: unknown area < 45% of the largest
+  // recognized area → treat as noise.
+  const recognizedAreas = faces
+    .filter((f) => isRec(f) && f.bbox)
+    .map((f) => f.bbox!.w * f.bbox!.h);
+  const maxRecArea = recognizedAreas.length ? Math.max(...recognizedAreas) : 0;
+  if (maxRecArea > 0) {
+    faces = faces.filter((f) => {
+      if (isRec(f) || !f.bbox) return true;
+      const area = f.bbox.w * f.bbox.h;
+      return area >= 0.45 * maxRecArea;
+    });
+  }
+
   const kept: FaceResult[] = [];
   for (const f of faces) {
     if (!f.bbox) { kept.push(f); continue; }
@@ -298,15 +316,22 @@ function reconcileTracks(prev: TrackedFace[], next: FaceResult[], nextId: { v: n
 function dropUnknownsInsideRecognized(tracks: TrackedFace[]): TrackedFace[] {
   const rec = tracks.filter((t) => t.status === 'recognized' && !!t.name && t.bbox);
   if (rec.length === 0) return tracks;
+  const recAreas = rec.map((r) => r.bbox!.w * r.bbox!.h);
+  const maxRecArea = Math.max(...recAreas);
   return tracks.filter((t) => {
     if (t.status === 'recognized' || !t.bbox) return true;
+    // Kill unknowns much smaller than the largest recognized face — those
+    // are almost always background posters / reflections / photo frames.
+    const tArea = t.bbox.w * t.bbox.h;
+    if (tArea < 0.45 * maxRecArea) return false;
     return !rec.some((r) => {
       const rb = r.bbox!;
       if (iou(rb, t.bbox!) > 0) return true;
-      // Also treat 'centre inside 1.4x expanded recognized bbox' as overlap.
+      // Also treat 'centre inside expanded recognized bbox' as overlap.
       const cx = t.bbox!.x + t.bbox!.w / 2;
       const cy = t.bbox!.y + t.bbox!.h / 2;
-      const pad = 0.20;   // 20% padding around the recognized bbox
+      const pad = 0.60;   // 60% padding: catches nearby unknowns spawned
+                          // by hair / shoulder / hand mis-detections.
       const x1 = rb.x - rb.w * pad;
       const y1 = rb.y - rb.h * pad;
       const x2 = rb.x + rb.w * (1 + pad);

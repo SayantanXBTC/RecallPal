@@ -1268,6 +1268,17 @@ class FaceEngine:
         # a single physical face.
         analyses = _nms_analyses(analyses, iou_thresh=0.35)
 
+        # Size filter: reject detections smaller than 2.5% of frame area.
+        # Kills poster / photo-on-wall / reflection false positives that
+        # bring up spurious "Unknown" cards next to the real user.
+        if analyses:
+            frame_area = float(fw * fh)
+            min_area   = frame_area * 0.025
+            analyses = [
+                a for a in analyses
+                if a.get("bbox") and (a["bbox"][2] * a["bbox"][3]) >= min_area
+            ]
+
         # Fallback path if insightface unavailable at runtime.
         if not analyses:
             bboxes = _detect_all_faces(frame)
