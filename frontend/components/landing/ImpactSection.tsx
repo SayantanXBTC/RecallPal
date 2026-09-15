@@ -3,7 +3,7 @@
 import { useRef } from 'react';
 import { motion, useInView } from 'framer-motion';
 import { fadeUp, scaleIn, staggerContainer } from '@/lib/variants';
-import { Sparkles, Shield, Users, Quote } from 'lucide-react';
+import { Sparkles, Shield, Users } from 'lucide-react';
 
 const PRINCIPLES = [
   {
@@ -20,17 +20,6 @@ const PRINCIPLES = [
     icon: <Users size={18} strokeWidth={1.6} />,
     title: 'Built with families',
     body:  'Every feature is shaped by real caregivers — the small kindnesses matter more than the flashy features.',
-  },
-];
-
-const VOICES = [
-  {
-    quote: 'My mother stopped asking who I was mid-sentence. That is the whole gift.',
-    who:   'Daughter, primary caregiver',
-  },
-  {
-    quote: 'I used to dread visits. Now she greets me by name before I sit down.',
-    who:   'Grandson, weekly visitor',
   },
 ];
 
@@ -90,7 +79,7 @@ export default function ImpactSection() {
           variants={staggerContainer}
           initial="hidden"
           animate={inView ? 'visible' : 'hidden'}
-          className="grid md:grid-cols-3 gap-4 mb-20"
+          className="grid md:grid-cols-3 gap-4"
         >
           {PRINCIPLES.map((p, i) => (
             <motion.div
@@ -117,63 +106,6 @@ export default function ImpactSection() {
               </p>
             </motion.div>
           ))}
-        </motion.div>
-
-        {/* Voices — testimonials */}
-        <motion.div
-          variants={staggerContainer}
-          initial="hidden"
-          animate={inView ? 'visible' : 'hidden'}
-          className="grid md:grid-cols-2 gap-6 mb-20"
-        >
-          {VOICES.map((v, i) => (
-            <motion.blockquote
-              key={v.who}
-              variants={scaleIn}
-              className="liquid-glass liquid-glass-tinted rounded-[1.75rem] p-9 md:p-10 relative overflow-hidden"
-              style={{ marginTop: i === 1 ? '2rem' : 0 }}
-            >
-              <Quote
-                size={28}
-                strokeWidth={1.2}
-                className="absolute top-6 right-6 opacity-25"
-                color="#C7D1FF"
-              />
-              <p
-                className="font-inter font-light text-xl md:text-[1.4rem] leading-relaxed text-white/90"
-                style={{ letterSpacing: '-0.015em' }}
-              >
-                &ldquo;{v.quote}&rdquo;
-              </p>
-              <footer
-                className="font-inter text-[0.7rem] mt-6 tracking-[0.22em] uppercase font-medium"
-                style={{ color: '#C7D1FF' }}
-              >
-                — {v.who}
-              </footer>
-            </motion.blockquote>
-          ))}
-        </motion.div>
-
-        {/* Bottom CTA */}
-        <motion.div
-          variants={fadeUp}
-          initial="hidden"
-          animate={inView ? 'visible' : 'hidden'}
-          custom={3}
-          className="text-center"
-        >
-          <p className="font-inter font-light text-lg mb-8 text-white/70">
-            Bring RecallPal into your family&apos;s daily rhythm.
-          </p>
-          <motion.a
-            href="/register"
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.98 }}
-            className="glass-btn glass-btn-primary"
-          >
-            Start for Free
-          </motion.a>
         </motion.div>
 
       </div>

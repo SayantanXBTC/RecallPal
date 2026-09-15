@@ -10,32 +10,55 @@
   .font-dm-sans { font-family: var(--font-inter), var(--font-dm-sans), system-ui, sans-serif; }
   .font-inter   { font-family: var(--font-inter), system-ui, sans-serif; }
 
-  /* Marketing landing is always cinematic dark — theme toggle affects app only. */
+  /* Marketing landing — cinematic. Palette shifts with data-theme. */
   .marketing-root {
-    --m-bg:           #05070C;
-    --m-bg-gradient:
-      radial-gradient(1200px 700px at 50% -10%, rgba(91,108,255,0.20) 0%, transparent 55%),
-      radial-gradient(900px 600px at 85% 110%, rgba(138,91,255,0.14) 0%, transparent 60%),
-      radial-gradient(700px 500px at 10% 60%, rgba(107,201,255,0.08) 0%, transparent 55%),
-      linear-gradient(180deg, #05070C 0%, #08090F 40%, #05070C 100%);
-    --m-surface:      rgba(255,255,255,0.03);
-    --m-surface-high: rgba(255,255,255,0.06);
-    --m-border:       rgba(255,255,255,0.10);
-    --m-text-dark:    #F5F7FA;
-    --m-text-mid:     #B7BFCC;
-    --m-text-soft:    #6E7789;
-    --m-section-alt:  rgba(255,255,255,0.02);
-    --m-accent:       #8AA0FF;
-    --m-accent-soft:  rgba(138,160,255,0.14);
-    background:       var(--m-bg-gradient);
-    background-attachment: fixed;
-    color:            var(--m-text-dark);
-    min-height:       100vh;
-    font-family:      var(--font-inter), system-ui, sans-serif;
-    letter-spacing:   -0.005em;
+    /* Dark cinematic (default) */
+    --m-scrim-top:   rgba(5,7,12,0.72);
+    --m-scrim-mid:   rgba(5,7,12,0.62);
+    --m-scrim-bot:   rgba(5,7,12,0.82);
+    --m-tint-a:      rgba(91,108,255,0.55);
+    --m-tint-b:      rgba(138,91,255,0.45);
+    --m-tint-base:   rgba(15,18,40,0.7);
+    --m-tint-base-b: rgba(20,10,40,0.6);
+    --m-glow-a:      rgba(91,108,255,0.20);
+    --m-glow-b:      rgba(138,91,255,0.16);
+    --m-orb-a:       rgba(91,108,255,0.18);
+    --m-orb-b:       rgba(138,91,255,0.18);
+    --m-horizon:     rgba(138,160,255,0.30);
+
+    --m-text-dark:   #F5F7FA;
+    --m-text-mid:    #B7BFCC;
+    --m-text-soft:   #6E7789;
+    --m-accent:      #8AA0FF;
+    --m-accent-soft: rgba(138,160,255,0.14);
+    background:      #05070C;
+    color:           var(--m-text-dark);
+    min-height:      100vh;
+    font-family:     var(--font-inter), system-ui, sans-serif;
+    letter-spacing:  -0.005em;
   }
 
-  /* Cool scrollbar for cinematic landing */
+  /* Light theme variant — lighter scrim, warmer indigo/cyan tint, still readable
+     over the video. Keeps cinematic feel; not a bright wellness palette. */
+  [data-theme="light"] .marketing-root {
+    --m-scrim-top:   rgba(30,32,48,0.48);
+    --m-scrim-mid:   rgba(30,32,48,0.38);
+    --m-scrim-bot:   rgba(20,22,34,0.62);
+    --m-tint-a:      rgba(107,201,255,0.42);
+    --m-tint-b:      rgba(91,108,255,0.32);
+    --m-tint-base:   rgba(40,50,80,0.45);
+    --m-tint-base-b: rgba(30,40,70,0.38);
+    --m-glow-a:      rgba(107,201,255,0.22);
+    --m-glow-b:      rgba(91,108,255,0.18);
+    --m-orb-a:       rgba(107,201,255,0.22);
+    --m-orb-b:       rgba(91,108,255,0.20);
+    --m-horizon:     rgba(180,210,255,0.38);
+    --m-text-dark:   #F8FAFF;
+    --m-text-mid:    #C7D1E6;
+    --m-text-soft:   #8892A6;
+  }
+
+  /* Cinematic scrollbar */
   .marketing-root::-webkit-scrollbar       { width: 4px; }
   .marketing-root::-webkit-scrollbar-track { background: transparent; }
   .marketing-root::-webkit-scrollbar-thumb { background: rgba(138,160,255,0.28); border-radius: 2px; }

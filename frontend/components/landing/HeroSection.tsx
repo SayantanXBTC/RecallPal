@@ -7,13 +7,6 @@ import { fadeUp, staggerContainer } from '@/lib/variants';
 import { useAuth } from '@/lib/auth-context';
 import ScrollIndicator from './ScrollIndicator';
 
-const AVATARS = [
-  'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=100',
-  'https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg?auto=compress&cs=tinysrgb&w=100',
-  'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=100',
-  'https://images.pexels.com/photos/697509/pexels-photo-697509.jpeg?auto=compress&cs=tinysrgb&w=100',
-];
-
 /* Triangular dot pattern icon — 9 white/60 dots arranged as pyramid */
 function TrianglePatternIcon() {
   const dots = [
@@ -78,30 +71,10 @@ export default function HeroSection() {
         animate={inView ? 'visible' : 'hidden'}
         className="relative z-10 max-w-2xl flex-1 flex flex-col justify-center mt-14 sm:mt-20 md:mt-28"
       >
-        {/* Badge — liquid glass pill with overlapping avatars */}
-        <motion.div variants={fadeUp} custom={0}>
-          <div className="liquid-glass rounded-full inline-flex items-center gap-2.5 sm:gap-3 px-3 py-1.5 sm:px-4 sm:py-2 mb-5 sm:mb-6">
-            <div className="flex -space-x-2">
-              {AVATARS.map((src, i) => (
-                <img
-                  key={i}
-                  src={src}
-                  alt=""
-                  className="h-5 w-5 sm:h-6 sm:w-6 rounded-full border-2 border-white/20 object-cover"
-                  loading="lazy"
-                />
-              ))}
-            </div>
-            <span className="text-xs sm:text-sm font-light text-white/80 font-inter">
-              A memory companion, reimagined
-            </span>
-          </div>
-        </motion.div>
-
         {/* Heading — original RecallPal copy */}
         <motion.h1
           variants={fadeUp}
-          custom={1}
+          custom={0}
           className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-normal leading-[1.05] text-white font-inter"
           style={{ letterSpacing: '-0.05em' }}
         >
@@ -112,38 +85,21 @@ export default function HeroSection() {
         {/* Subtitle — original copy */}
         <motion.p
           variants={fadeUp}
-          custom={2}
+          custom={1}
           className="mt-4 sm:mt-5 text-sm sm:text-base md:text-lg font-light text-white/70 font-inter max-w-xl leading-relaxed"
         >
           Your friendly AI companion for helping you remember the people who matter most —
           with warmth, dignity, and care.
         </motion.p>
 
-        {/* CTAs — original wording preserved */}
-        <motion.div variants={fadeUp} custom={3} className="mt-6 sm:mt-8 flex flex-wrap gap-3">
-          {authed ? (
-            <Link
-              href="/dashboard"
-              className="liquid-glass rounded-full px-6 py-3 sm:px-7 sm:py-3.5 text-sm font-medium text-white font-inter transition duration-300 hover:bg-white/10"
-            >
-              Open Dashboard
-            </Link>
-          ) : (
-            <>
-              <Link
-                href="/register"
-                className="liquid-glass rounded-full px-6 py-3 sm:px-7 sm:py-3.5 text-sm font-medium text-white font-inter transition duration-300 hover:bg-white/10"
-              >
-                Register Now
-              </Link>
-              <Link
-                href="/login"
-                className="liquid-glass rounded-full px-6 py-3 sm:px-7 sm:py-3.5 text-sm font-medium text-white/80 font-inter transition duration-300 hover:bg-white/10 hover:text-white"
-              >
-                Already registered? <span className="text-[#C7D1FF] ml-1">Log in</span>
-              </Link>
-            </>
-          )}
+        {/* CTA — single Get Started */}
+        <motion.div variants={fadeUp} custom={2} className="mt-6 sm:mt-8">
+          <Link
+            href={authed ? '/dashboard' : '/login'}
+            className="liquid-glass rounded-full px-7 py-3.5 sm:px-8 sm:py-4 text-sm font-medium text-white font-inter transition duration-300 hover:bg-white/10 inline-block"
+          >
+            {authed ? 'Open Dashboard' : 'Get Started'}
+          </Link>
         </motion.div>
       </motion.div>
 

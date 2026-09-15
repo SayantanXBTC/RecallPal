@@ -134,39 +134,6 @@ export default function HowItWorksSection() {
           ))}
         </motion.div>
 
-        {/* CTA banner */}
-        <motion.div
-          variants={fadeUp}
-          initial="hidden"
-          animate={inView ? 'visible' : 'hidden'}
-          custom={4}
-          className="mt-20 liquid-glass liquid-glass-tinted rounded-[2rem] p-10 md:p-14 text-center relative overflow-hidden"
-        >
-          <div
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              background:
-                'radial-gradient(600px 300px at 50% 0%, rgba(91,108,255,0.16) 0%, transparent 60%)',
-            }}
-          />
-          <h3
-            className="headline-editorial text-white mb-4 relative z-10"
-            style={{ fontSize: 'clamp(1.7rem, 3vw, 2.6rem)' }}
-          >
-            Ready to get started?
-          </h3>
-          <p className="font-inter font-light text-lg max-w-xl mx-auto mb-8 leading-relaxed text-white/65 relative z-10">
-            Create a free account and add your first family member in under two minutes.
-          </p>
-          <motion.a
-            href="/register"
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.98 }}
-            className="glass-btn glass-btn-primary relative z-10"
-          >
-            Get Started Free
-          </motion.a>
-        </motion.div>
       </div>
     </section>
   );

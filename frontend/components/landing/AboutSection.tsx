@@ -280,43 +280,42 @@ export default function AboutSection() {
             </motion.div>
           </motion.div>
 
-          {/* How RecallPal helps — hero glass panel */}
+          {/* How RecallPal helps — compact glass panel */}
           <motion.div
             variants={fadeUp}
             initial="hidden"
             animate={factIn ? 'visible' : 'hidden'}
             custom={3}
-            className="mt-10 liquid-glass liquid-glass-tinted rounded-[2rem] p-10 md:p-14 text-center relative overflow-hidden"
+            className="mt-10 liquid-glass liquid-glass-tinted rounded-3xl px-6 py-7 md:px-8 md:py-8 relative overflow-hidden max-w-3xl mx-auto flex items-start gap-5"
           >
             <div
-              className="absolute -top-32 left-1/2 -translate-x-1/2 w-[480px] h-[480px] rounded-full pointer-events-none"
+              className="absolute -top-20 left-1/2 -translate-x-1/2 w-[320px] h-[320px] rounded-full pointer-events-none"
               style={{
-                background: 'radial-gradient(circle, rgba(91,108,255,0.20) 0%, transparent 65%)',
-                filter: 'blur(60px)',
+                background: 'radial-gradient(circle, rgba(91,108,255,0.18) 0%, transparent 65%)',
+                filter: 'blur(50px)',
               }}
             />
             <div
-              className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-6 relative z-10"
+              className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 relative z-10"
               style={{
                 background: 'linear-gradient(135deg, #E8ECFF, #C7D1FF)',
                 color: '#0A0C10',
-                boxShadow: '0 10px 30px -8px rgba(91,108,255,0.55)',
+                boxShadow: '0 8px 22px -8px rgba(91,108,255,0.55)',
               }}
             >
-              <Heart size={20} strokeWidth={1.6} />
+              <Heart size={16} strokeWidth={1.6} />
             </div>
-            <h3
-              className="headline-editorial text-white mb-5 relative z-10"
-              style={{ fontSize: 'clamp(1.6rem, 2.8vw, 2.4rem)' }}
-            >
-              How RecallPal Helps
-            </h3>
-            <p className="font-inter font-light text-[1.05rem] max-w-2xl mx-auto leading-relaxed text-white/70 relative z-10">
-              RecallPal uses real-time face recognition and AI-powered memory cards to help patients
-              identify the people around them — reducing anxiety, strengthening bonds, and giving
-              caregivers a compassionate tool that works silently in the background. No complexity.
-              Just connection.
-            </p>
+            <div className="relative z-10">
+              <h3 className="font-inter text-lg md:text-xl font-medium text-white tracking-tight mb-1.5">
+                How RecallPal Helps
+              </h3>
+              <p className="font-inter font-light text-[0.94rem] leading-relaxed text-white/70">
+                RecallPal uses real-time face recognition and AI-powered memory cards to help patients
+                identify the people around them — reducing anxiety, strengthening bonds, and giving
+                caregivers a compassionate tool that works silently in the background. No complexity.
+                Just connection.
+              </p>
+            </div>
           </motion.div>
         </div>
       </section>

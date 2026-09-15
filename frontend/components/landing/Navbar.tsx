@@ -119,21 +119,13 @@ export default function Navbar() {
                 </Link>
               </>
             ) : (
-              <>
-                <Link
-                  href="/login"
-                  className="font-inter text-[0.82rem] font-medium text-white/75 hover:text-white transition-colors duration-300 px-3"
-                >
-                  Log In
-                </Link>
-                <Link
-                  href="/register"
-                  className="glass-btn glass-btn-primary text-[0.82rem]"
-                  style={{ padding: '0.55rem 1.15rem' }}
-                >
-                  Get Started
-                </Link>
-              </>
+              <Link
+                href="/login"
+                className="glass-btn glass-btn-primary text-[0.82rem]"
+                style={{ padding: '0.55rem 1.4rem' }}
+              >
+                Log In
+              </Link>
             )}
           </div>
 
@@ -223,14 +215,9 @@ export default function Navbar() {
                     Open Dashboard
                   </Link>
                 ) : (
-                  <>
-                    <Link href="/login" className="glass-btn w-full justify-center">
-                      Log In
-                    </Link>
-                    <Link href="/register" className="glass-btn glass-btn-primary w-full justify-center">
-                      Get Started
-                    </Link>
-                  </>
+                  <Link href="/login" className="glass-btn glass-btn-primary w-full justify-center">
+                    Log In
+                  </Link>
                 )}
               </div>
             </motion.div>

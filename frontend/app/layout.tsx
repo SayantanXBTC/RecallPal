@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Plus_Jakarta_Sans, Playfair_Display, DM_Sans } from 'next/font/google';
+import { Plus_Jakarta_Sans, Playfair_Display, DM_Sans, Inter } from 'next/font/google';
 import { AuthProvider } from '@/lib/auth-context';
 import { AccessibilityProvider } from '@/lib/accessibility-context';
 import { ThemeProvider } from '@/lib/theme-context';
@@ -28,6 +28,13 @@ const dmSans = DM_Sans({
   display:  'swap',
 });
 
+const inter = Inter({
+  subsets:  ['latin'],
+  weight:   ['300', '400', '500', '600', '700'],
+  variable: '--font-inter',
+  display:  'swap',
+});
+
 export const metadata: Metadata = {
   title: 'RecallPal — Remember What Matters',
   description: 'AI-powered memory companion for dementia care',
@@ -35,7 +42,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${plusJakarta.variable} ${playfair.variable} ${dmSans.variable}`}>
+    <html lang="en" className={`${plusJakarta.variable} ${playfair.variable} ${dmSans.variable} ${inter.variable}`}>
       <body><AccessibilityProvider><AuthProvider><ThemeProvider><AssistantMount>{children}</AssistantMount></ThemeProvider></AuthProvider></AccessibilityProvider></body>
     </html>
   );
