@@ -149,6 +149,48 @@ def _get_face_app():
     return _FACE_APP
 
 
+def _iou_xywh(a: tuple, b: tuple) -> float:
+    """IoU on (x, y, w, h) rectangles."""
+    ax, ay, aw, ah = a
+    bx, by, bw, bh = b
+    ax2, ay2 = ax + aw, ay + ah
+    bx2, by2 = bx + bw, by + bh
+    ix1, iy1 = max(ax, bx), max(ay, by)
+    ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+    iw = max(0, ix2 - ix1)
+    ih = max(0, iy2 - iy1)
+    inter = iw * ih
+    if inter <= 0:
+        return 0.0
+    union = aw * ah + bw * bh - inter
+    return inter / union if union > 0 else 0.0
+
+
+def _nms_analyses(analyses: list[dict], iou_thresh: float = 0.35) -> list[dict]:
+    """Suppress overlapping face detections.
+
+    Keeps the larger-area bbox when two detections overlap above
+    ``iou_thresh``. Order-independent: sort by area descending first so
+    the biggest face wins.
+    """
+    if len(analyses) < 2:
+        return analyses
+    sorted_items = sorted(
+        analyses,
+        key=lambda it: (it["bbox"][2] * it["bbox"][3]) if it.get("bbox") else 0,
+        reverse=True,
+    )
+    kept: list[dict] = []
+    for it in sorted_items:
+        bb = it.get("bbox")
+        if not bb:
+            continue
+        if any(_iou_xywh(bb, k["bbox"]) >= iou_thresh for k in kept):
+            continue
+        kept.append(it)
+    return kept
+
+
 def _analyze_frame(frame: np.ndarray) -> list[dict]:
     """Detect + embed all faces in *frame* with insightface.
 
@@ -1219,6 +1261,12 @@ class FaceEngine:
         # microservice when INFERENCE_URL is set, else runs in-process.
         from inference_client import analyze_frame as _remote_or_local_analyze
         analyses = _remote_or_local_analyze(frame)
+
+        # NMS: RetinaFace occasionally emits two bboxes on the same head
+        # (glasses vs mouth, hair vs chin). Suppress overlaps > IoU 0.35
+        # before matching so we never surface twin "Unknown" cards for
+        # a single physical face.
+        analyses = _nms_analyses(analyses, iou_thresh=0.35)
 
         # Fallback path if insightface unavailable at runtime.
         if not analyses:

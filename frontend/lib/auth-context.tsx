@@ -151,7 +151,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clear();
     setToken(null);
     setUser(null);
-    router.replace('/login');
+    setRefreshTok(null);
+    setTokenExpiry(null);
+    // Hard nav avoids the double-redirect flash: the app shell would
+    // otherwise see token=null, render the spinner, and fire its own
+    // router.replace('/login') while `logout` also called replace.
+    if (typeof window !== 'undefined') {
+      window.location.replace('/login');
+    } else {
+      router.replace('/login');
+    }
   }, [router]);
 
   const refreshToken = useCallback(async (): Promise<boolean> => {
