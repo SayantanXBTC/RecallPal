@@ -1,7 +1,14 @@
 import type { Metadata } from 'next';
-import { Playfair_Display, DM_Sans } from 'next/font/google';
+import { Inter, Playfair_Display, DM_Sans } from 'next/font/google';
 import BubblesBackground from '@/components/landing/BubblesBackground';
 import '../globals.css';
+
+const inter = Inter({
+  subsets:  ['latin'],
+  weight:   ['300', '400', '500', '600', '700'],
+  variable: '--font-inter',
+  display:  'swap',
+});
 
 const playfair = Playfair_Display({
   subsets:  ['latin'],
@@ -25,7 +32,7 @@ export const metadata: Metadata = {
 
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className={`${playfair.variable} ${dmSans.variable} font-dm-sans marketing-root`}>
+    <div className={`${inter.variable} ${playfair.variable} ${dmSans.variable} font-inter marketing-root`}>
       <BubblesBackground />
       <div className="relative z-10">
         {children}

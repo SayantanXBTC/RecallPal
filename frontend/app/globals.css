@@ -2,49 +2,44 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Landing page base styles ─────────────────────────────────────────────── */
+/* ─── Landing page base styles (cinematic dark) ────────────────────────────── */
 @layer base {
   html { scroll-behavior: smooth; }
 
-  .font-serif   { font-family: var(--font-playfair), Georgia, serif; }
-  .font-dm-sans { font-family: var(--font-dm-sans), system-ui, sans-serif; }
+  .font-serif   { font-family: var(--font-inter), var(--font-playfair), Georgia, serif; }
+  .font-dm-sans { font-family: var(--font-inter), var(--font-dm-sans), system-ui, sans-serif; }
+  .font-inter   { font-family: var(--font-inter), system-ui, sans-serif; }
 
-  /* ── Light mode (default) ── */
+  /* Marketing landing is always cinematic dark — theme toggle affects app only. */
   .marketing-root {
-    --m-bg:           #FAF6F1;
-    --m-bg-gradient:  linear-gradient(135deg, #FAF6F1 0%, #EEF4FB 45%, #FDF0E8 100%);
-    --m-surface:      rgba(255,255,255,0.72);
-    --m-surface-high: rgba(255,255,255,0.88);
-    --m-border:       rgba(255,255,255,0.70);
-    --m-text-dark:    #3A2F28;
-    --m-text-mid:     #6B5C52;
-    --m-text-soft:    #9A8C84;
-    --m-section-alt:  rgba(255,255,255,0.35);
+    --m-bg:           #05070C;
+    --m-bg-gradient:
+      radial-gradient(1200px 700px at 50% -10%, rgba(91,108,255,0.20) 0%, transparent 55%),
+      radial-gradient(900px 600px at 85% 110%, rgba(138,91,255,0.14) 0%, transparent 60%),
+      radial-gradient(700px 500px at 10% 60%, rgba(107,201,255,0.08) 0%, transparent 55%),
+      linear-gradient(180deg, #05070C 0%, #08090F 40%, #05070C 100%);
+    --m-surface:      rgba(255,255,255,0.03);
+    --m-surface-high: rgba(255,255,255,0.06);
+    --m-border:       rgba(255,255,255,0.10);
+    --m-text-dark:    #F5F7FA;
+    --m-text-mid:     #B7BFCC;
+    --m-text-soft:    #6E7789;
+    --m-section-alt:  rgba(255,255,255,0.02);
+    --m-accent:       #8AA0FF;
+    --m-accent-soft:  rgba(138,160,255,0.14);
     background:       var(--m-bg-gradient);
+    background-attachment: fixed;
     color:            var(--m-text-dark);
     min-height:       100vh;
-    transition:       background 0.4s ease, color 0.3s ease;
+    font-family:      var(--font-inter), system-ui, sans-serif;
+    letter-spacing:   -0.005em;
   }
 
-  /* ── Dark mode ── */
-  [data-theme="dark"] .marketing-root {
-    --m-bg:           #120E09;
-    --m-bg-gradient:  linear-gradient(135deg, #120E09 0%, #0D1520 45%, #16100A 100%);
-    --m-surface:      rgba(255,255,255,0.06);
-    --m-surface-high: rgba(255,255,255,0.10);
-    --m-border:       rgba(255,255,255,0.12);
-    --m-text-dark:    #F5EFE8;
-    --m-text-mid:     #C4B09A;
-    --m-text-soft:    #8A7D72;
-    --m-section-alt:  rgba(255,255,255,0.03);
-    background:       var(--m-bg-gradient);
-    color:            var(--m-text-dark);
-  }
-
-  /* Warm scrollbar */
+  /* Cool scrollbar for cinematic landing */
   .marketing-root::-webkit-scrollbar       { width: 4px; }
   .marketing-root::-webkit-scrollbar-track { background: transparent; }
-  .marketing-root::-webkit-scrollbar-thumb { background: rgba(201,148,58,0.35); border-radius: 2px; }
+  .marketing-root::-webkit-scrollbar-thumb { background: rgba(138,160,255,0.28); border-radius: 2px; }
+  .marketing-root::-webkit-scrollbar-thumb:hover { background: rgba(138,160,255,0.45); }
 }
 
 @layer base {
@@ -319,4 +314,226 @@ html.high-contrast select {
   background: #111 !important;
   color:      var(--hc-text) !important;
   border:     2px solid var(--hc-border) !important;
+}
+
+/* ─── Liquid Glass System (cinematic marketing) ────────────────────────────── */
+
+.liquid-glass {
+  background: rgba(255, 255, 255, 0.02);
+  background-blend-mode: luminosity;
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.08),
+    0 20px 60px -20px rgba(0, 0, 0, 0.7);
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+  isolation: isolate;
+}
+
+.liquid-glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.4px;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.35) 0%,
+    rgba(255, 255, 255, 0.10) 20%,
+    transparent 40%,
+    transparent 60%,
+    rgba(255, 255, 255, 0.08) 80%,
+    rgba(255, 255, 255, 0.28) 100%
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.liquid-glass > * { position: relative; z-index: 2; }
+
+.liquid-glass-strong {
+  background: rgba(255, 255, 255, 0.035);
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+}
+
+.liquid-glass-subtle {
+  background: rgba(255, 255, 255, 0.015);
+  backdrop-filter: blur(8px) saturate(120%);
+  -webkit-backdrop-filter: blur(8px) saturate(120%);
+}
+
+.liquid-glass-tinted::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(120% 80% at 0% 0%, rgba(91, 108, 255, 0.10) 0%, transparent 55%),
+    radial-gradient(120% 80% at 100% 100%, rgba(138, 91, 255, 0.08) 0%, transparent 55%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Editorial headline treatment */
+.headline-editorial {
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-weight: 300;
+  letter-spacing: -0.035em;
+  line-height: 0.98;
+}
+
+.headline-editorial em,
+.headline-editorial .accent {
+  font-style: normal;
+  font-weight: 300;
+  background: linear-gradient(120deg, #E9EDF7 0%, #8AA0FF 40%, #C7B4FF 70%, #E9EDF7 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 12s linear infinite;
+}
+
+/* Section divider — subtle horizon line */
+.horizon-line {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.08) 20%,
+    rgba(138, 160, 255, 0.20) 50%,
+    rgba(255, 255, 255, 0.08) 80%,
+    transparent 100%
+  );
+}
+
+/* Small badge above section headers */
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(199, 180, 255, 0.85);
+}
+
+.eyebrow::before {
+  content: "";
+  width: 1.5rem;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(138, 160, 255, 0.6));
+}
+
+/* Reveal on scroll utility (used alongside framer-motion) */
+.reveal-mask {
+  clip-path: inset(0 0 100% 0);
+  transition: clip-path 900ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.reveal-mask.in {
+  clip-path: inset(0 0 0 0);
+}
+
+/* Glass button base — used by CTAs */
+.glass-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  padding: 0.9rem 1.6rem;
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-weight: 500;
+  font-size: 0.95rem;
+  letter-spacing: -0.005em;
+  color: rgba(245, 247, 250, 0.95);
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
+              background 300ms ease,
+              box-shadow 300ms ease;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.glass-btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.2px;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.45),
+    rgba(255, 255, 255, 0.10) 40%,
+    transparent 60%,
+    rgba(255, 255, 255, 0.08) 90%,
+    rgba(255, 255, 255, 0.30)
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  pointer-events: none;
+}
+
+.glass-btn:hover {
+  background: rgba(255, 255, 255, 0.07);
+  transform: translateY(-1px);
+  box-shadow: 0 20px 40px -18px rgba(91, 108, 255, 0.35),
+              inset 0 1px 1px rgba(255, 255, 255, 0.14);
+}
+
+.glass-btn:active { transform: translateY(0) scale(0.985); }
+
+.glass-btn-primary {
+  color: #050608;
+  background: linear-gradient(135deg, rgba(232, 236, 255, 0.98) 0%, rgba(199, 209, 255, 0.92) 100%);
+  box-shadow:
+    0 20px 40px -20px rgba(91, 108, 255, 0.55),
+    inset 0 1px 1px rgba(255, 255, 255, 0.6);
+}
+
+.glass-btn-primary:hover {
+  background: linear-gradient(135deg, #FFFFFF 0%, #DDE3FF 100%);
+  box-shadow:
+    0 26px 50px -20px rgba(91, 108, 255, 0.65),
+    inset 0 1px 1px rgba(255, 255, 255, 0.7);
+}
+
+/* Section base — cinematic vertical rhythm */
+.cinema-section {
+  position: relative;
+  padding-top: clamp(5rem, 10vw, 9rem);
+  padding-bottom: clamp(5rem, 10vw, 9rem);
+}
+
+/* Grain / film noise overlay */
+.grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 3px 3px;
+  mix-blend-mode: overlay;
+  opacity: 0.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .headline-editorial em,
+  .headline-editorial .accent { animation: none; }
 }
