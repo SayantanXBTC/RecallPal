@@ -1,9 +1,10 @@
 'use client';
 
 /**
- * Cinematic atmospheric background — dark, layered orbs, subtle grain, faint grid.
- * Replaces the previous "bubbles" identity while keeping the same component name
- * so the marketing layout continues to mount it unchanged.
+ * Fixed cinematic background:
+ *   1. Looping muted video, object-cover, full viewport
+ *   2. Deep dark overlay w/ indigo/violet tint to preserve cinematic theme
+ *   3. Subtle drifting orbs + horizon line for depth
  */
 export default function BubblesBackground() {
   return (
@@ -12,78 +13,87 @@ export default function BubblesBackground() {
       aria-hidden
       style={{ zIndex: 0 }}
     >
-      {/* Deep vignette base */}
+      {/* Background video */}
+      <video
+        autoPlay
+        loop
+        muted
+        playsInline
+        preload="auto"
+        className="absolute inset-0 w-full h-full object-cover"
+      >
+        <source
+          src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260715_082433_69699cf8-444b-4484-93cc-053e57896dfd.mp4"
+          type="video/mp4"
+        />
+      </video>
+
+      {/* Dark scrim — preserves cinematic dark theme */}
       <div
         className="absolute inset-0"
         style={{
           background:
-            'radial-gradient(ellipse 90% 60% at 50% 0%, rgba(91,108,255,0.14) 0%, transparent 60%),' +
-            'radial-gradient(ellipse 70% 50% at 85% 100%, rgba(138,91,255,0.12) 0%, transparent 65%),' +
-            'radial-gradient(ellipse 60% 45% at 10% 70%, rgba(107,201,255,0.08) 0%, transparent 60%),' +
-            'linear-gradient(180deg, #05070C 0%, #07080E 45%, #05070C 100%)',
+            'linear-gradient(180deg, rgba(5,7,12,0.72) 0%, rgba(5,7,12,0.62) 40%, rgba(5,7,12,0.82) 100%)',
         }}
       />
 
-      {/* Drifting orbs */}
+      {/* Indigo / violet color tint to enforce brand palette */}
       <div
-        className="absolute w-[720px] h-[720px] rounded-full animate-drift"
+        className="absolute inset-0 mix-blend-color"
         style={{
-          top:    '-14%',
-          left:   '-10%',
-          background: 'radial-gradient(circle, rgba(91,108,255,0.22) 0%, transparent 65%)',
+          background:
+            'radial-gradient(ellipse 90% 60% at 50% 0%, rgba(91,108,255,0.55) 0%, transparent 60%),' +
+            'radial-gradient(ellipse 70% 50% at 85% 100%, rgba(138,91,255,0.45) 0%, transparent 65%),' +
+            'linear-gradient(180deg, rgba(15,18,40,0.7) 0%, rgba(20,10,40,0.6) 100%)',
+        }}
+      />
+
+      {/* Ambient additive glow */}
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            'radial-gradient(ellipse 80% 55% at 50% -10%, rgba(91,108,255,0.20) 0%, transparent 55%),' +
+            'radial-gradient(ellipse 60% 45% at 90% 110%, rgba(138,91,255,0.16) 0%, transparent 60%)',
+        }}
+      />
+
+      {/* Subtle drifting orbs (retained from cinematic redesign) */}
+      <div
+        className="absolute w-[520px] h-[520px] rounded-full animate-drift-slow opacity-70"
+        style={{
+          top:    '-10%',
+          left:   '-8%',
+          background: 'radial-gradient(circle, rgba(91,108,255,0.18) 0%, transparent 65%)',
           filter: 'blur(80px)',
         }}
       />
       <div
-        className="absolute w-[640px] h-[640px] rounded-full animate-drift-slow"
+        className="absolute w-[560px] h-[560px] rounded-full animate-drift opacity-70"
         style={{
-          bottom: '-16%',
-          right:  '-12%',
-          background: 'radial-gradient(circle, rgba(138,91,255,0.20) 0%, transparent 65%)',
+          bottom: '-14%',
+          right:  '-10%',
+          background: 'radial-gradient(circle, rgba(138,91,255,0.18) 0%, transparent 65%)',
           filter: 'blur(90px)',
         }}
       />
+
+      {/* Top horizon line */}
       <div
-        className="absolute w-[520px] h-[520px] rounded-full animate-float-slow"
+        className="absolute top-0 inset-x-0 h-px"
         style={{
-          top:    '38%',
-          left:   '52%',
-          background: 'radial-gradient(circle, rgba(107,201,255,0.14) 0%, transparent 65%)',
-          filter: 'blur(70px)',
+          background:
+            'linear-gradient(90deg, transparent, rgba(138,160,255,0.30) 50%, transparent)',
         }}
       />
 
-      {/* Faint grid */}
-      <div
-        className="absolute inset-0 opacity-[0.06]"
-        style={{
-          backgroundImage:
-            'linear-gradient(rgba(255,255,255,0.9) 1px, transparent 1px),' +
-            'linear-gradient(90deg, rgba(255,255,255,0.9) 1px, transparent 1px)',
-          backgroundSize: '80px 80px',
-          maskImage:
-            'radial-gradient(ellipse 70% 60% at 50% 40%, black 30%, transparent 75%)',
-          WebkitMaskImage:
-            'radial-gradient(ellipse 70% 60% at 50% 40%, black 30%, transparent 75%)',
-        }}
-      />
-
-      {/* Subtle noise */}
+      {/* Grain */}
       <div
         className="absolute inset-0 opacity-[0.05] mix-blend-overlay"
         style={{
           backgroundImage:
             'radial-gradient(rgba(255,255,255,0.7) 1px, transparent 1px)',
           backgroundSize: '3px 3px',
-        }}
-      />
-
-      {/* Top horizon */}
-      <div
-        className="absolute top-0 inset-x-0 h-px"
-        style={{
-          background:
-            'linear-gradient(90deg, transparent, rgba(138,160,255,0.35) 50%, transparent)',
         }}
       />
     </div>
