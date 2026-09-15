@@ -64,12 +64,13 @@ except AttributeError:
 # ---------------------------------------------------------------------------
 _FACE_APP = None                       # type: ignore[var-annotated]
 _FACE_APP_LOCK = threading.Lock()
-# Detection resolution — smaller = less RAM + faster on CPU. 512 is a
-# good balance for webcam-distance faces; drop to 320 on very constrained
-# hosts (INSIGHTFACE_DET_SIZE=320).
+# Detection resolution — smaller = less RAM + faster on CPU. 320 matches
+# the client capture size (400x300 JPEG) so we don't waste cycles on
+# padded pixels; bump to 512 for constrained-lighting or far-distance
+# webcams (INSIGHTFACE_DET_SIZE=512).
 _INSIGHTFACE_DET_SIZE = (
-    int(os.environ.get("INSIGHTFACE_DET_SIZE", "512")),
-    int(os.environ.get("INSIGHTFACE_DET_SIZE", "512")),
+    int(os.environ.get("INSIGHTFACE_DET_SIZE", "320")),
+    int(os.environ.get("INSIGHTFACE_DET_SIZE", "320")),
 )
 # Model bundle — buffalo_sc is single-model, ~16 MB, CPU-friendly.
 # buffalo_l is higher-accuracy but ~300 MB and needs ~1 GB RAM to load.

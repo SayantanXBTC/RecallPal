@@ -513,12 +513,12 @@ export default function CameraPanel({ onRecognition, currentResult, onAddRequest
       // Smaller frame + lower JPEG quality → less bytes across the wire
       // and faster server-side detection with no accuracy loss at typical
       // desk-webcam distance.
-      canvas.width  = Math.min(video.videoWidth  || 480, 480);
-      canvas.height = Math.min(video.videoHeight || 360, 360);
+      canvas.width  = Math.min(video.videoWidth  || 400, 400);
+      canvas.height = Math.min(video.videoHeight || 300, 300);
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const b64 = canvas.toDataURL('image/jpeg', 0.72).split(',')[1];
+      const b64 = canvas.toDataURL('image/jpeg', 0.65).split(',')[1];
 
       const res = await fetch('/api/recognize', {
         method:  'POST',
@@ -554,7 +554,7 @@ export default function CameraPanel({ onRecognition, currentResult, onAddRequest
 
   useEffect(() => {
     if (isActive) {
-      intervalRef.current = setInterval(captureAndRecognize, 500);
+      intervalRef.current = setInterval(captureAndRecognize, 350);
     } else {
       if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
     }

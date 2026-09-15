@@ -77,7 +77,6 @@ export default function AssistantPanel() {
   const [thinking,    setThinking]    = useState(false);
   const [muted,       setMuted]       = useState(false);
   const [listening,   setListening]   = useState(false);
-  const [available,   setAvailable]   = useState(true);
   const [pulseNudge,  setPulseNudge]  = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -139,10 +138,18 @@ export default function AssistantPanel() {
         }),
       });
       if (res.status === 503) {
-        setAvailable(false);
         setMessages((m) => [...m, {
           role: 'assistant',
-          content: 'The helper is not turned on right now. You can still use every button on the screen.',
+          content: 'The helper is warming up. Please try again in a moment.',
+        }]);
+        return;
+      }
+      if (!res.ok) {
+        // 401 / 500 / anything non-2xx — surface a message but keep the
+        // input live so the user can retry once the backend is back.
+        setMessages((m) => [...m, {
+          role: 'assistant',
+          content: 'I could not think just then. Please try again in a moment.',
         }]);
         return;
       }
@@ -334,8 +341,8 @@ export default function AssistantPanel() {
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder={available ? 'Type or press the microphone…' : 'Assistant is off — set ANTHROPIC_API_KEY.'}
-                disabled={thinking || !available}
+                placeholder="Type or press the microphone…"
+                disabled={thinking}
                 className="flex-1 rounded-full px-3 py-2 text-sm font-dm-sans outline-none"
                 style={{
                   background: 'rgba(255,255,255,0.05)',
@@ -345,7 +352,7 @@ export default function AssistantPanel() {
               />
               <button
                 type="submit"
-                disabled={thinking || !input.trim() || !available}
+                disabled={thinking || !input.trim()}
                 className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 disabled:opacity-40"
                 style={{ background: 'linear-gradient(135deg,#C9943A,#F0C97A)', color: 'white' }}
                 title="Send"

@@ -629,7 +629,7 @@ def health():
 
 @app.route("/api/recognize", methods=["POST"])
 @require_auth
-@limiter.limit("30 per minute")
+@limiter.limit("240 per minute")   # 4 req/s ceiling — client polls ~3/s
 def recognize():
     """
     Identify all faces in a single webcam frame.
